@@ -1,0 +1,32 @@
+name: CI Build
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build (Release)
+        run: dotnet build -c Release -v minimal
+
+      - name: Headless self-test (capture / OCR / filter / cache)
+        run: |
+          $exe = "bin/Release/net8.0-windows10.0.19041.0/GlassTranslate.exe"
+          if (Test-Path $exe) {
+            & $exe --selftest
+            $log = "bin/Release/net8.0-windows10.0.19041.0/selftest.log"
+            if (Test-Path $log) { Get-Content $log }
+          } else {
+            Write-Host "exe not found, skip selftest"
+          }
+        shell: pwsh

@@ -1,0 +1,11 @@
+# 构建产物
+bin/
+obj/
+publish/
+
+# 本地运行痕迹
+selftest.log
+*.log
+_*.png
+*.user
+.vs/
