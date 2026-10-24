@@ -54,7 +54,7 @@ dotnet publish -c Release -r win-x64 --self-contained true \
 ## Quick start (3 steps)
 
 1. **Left-click the orb** → **⚙ 配置 API** (Configure API)
-2. Pick a provider (OpenAI / Anthropic), paste your **API key** (the base URL accepts relay endpoints), click **测试连接** (Test connection) until it shows ✓, then save
+2. Pick a provider (DeepSeek / Qwen / Kimi / GLM / OpenAI / Anthropic / custom), paste your **API key** (the base URL accepts relay endpoints), click **测试连接** (Test connection) until it shows ✓, then save
 3. Click the orb again → enable **启用实时全屏翻译** (Realtime full-screen translation) — English sentences on screen now get live Chinese translations beside them
 
 > If nothing happens on first use, see [OCR prerequisite](#ocr-prerequisite-one-time-setup).
@@ -90,16 +90,27 @@ If OCR is missing: **Windows Settings → Apps → Optional features → Add a f
 
 ## API configuration
 
-| Field | OpenAI | Anthropic |
-|---|---|---|
-| Default base URL | `https://api.openai.com/v1` | `https://api.anthropic.com` |
-| Default model | `gpt-4o-mini` | `claude-3-5-haiku-latest` |
-| Compatible | any OpenAI-protocol relay | any Anthropic-protocol relay |
+**8 built-in provider presets** (one click in the settings window; official base URL and model list fill in automatically):
 
-- Base URLs are normalized automatically — paste `https://your-relay.com`, `.../v1`, `.../v1/chat/completions`, `.../v1/messages`, whatever your relay gives you.
-- Model names are free-form (the dropdown is just presets).
-- API keys are encrypted with **Windows DPAPI** (current user) before touching disk — no plaintext in `%APPDATA%\GlassTranslate\config.json`.
-- System proxy is honored automatically.
+| Preset | Protocol | Default base URL | Default model | Get key |
+|---|---|---|---|---|
+| **DeepSeek** | OpenAI-compatible | `https://api.deepseek.com` | deepseek-chat | platform.deepseek.com |
+| **Tongyi Qwen (Alibaba)** | OpenAI-compatible | `https://dashscope.aliyuncs.com/compatible-mode/v1` | qwen-flash | bailian.console.aliyun.com |
+| **Kimi (Moonshot AI)** | OpenAI-compatible | `https://api.moonshot.cn/v1` | kimi-k2-turbo-preview | platform.moonshot.cn |
+| **GLM (Zhipu BigModel)** | OpenAI-compatible | `https://open.bigmodel.cn/api/paas/v4` | glm-4.5-flash (free) | bigmodel.cn |
+| **OpenAI** | OpenAI | `https://api.openai.com/v1` | gpt-4o-mini | platform.openai.com |
+| **Anthropic** | Anthropic | `https://api.anthropic.com` | claude-3-5-haiku-latest | console.anthropic.com |
+| Custom (OpenAI protocol) | OpenAI-compatible | any relay/gateway | free-form | — |
+| Custom (Anthropic protocol) | Anthropic-compatible | any relay/gateway | free-form | — |
+
+Key points:
+
+- **OpenAI / Anthropic are *protocols*, not vendors** — most Chinese and international model services expose OpenAI-compatible endpoints; pick the preset, paste that vendor's key, done.
+- Switching presets auto-fills the official base URL and model list; model names remain free-form (the dropdown is just presets). Key / URL / model are remembered per provider during a session, so switching back and forth never re-pastes keys.
+- Any base URL can be replaced by a relay (suffixes like `/v1`, `/chat/completions`, `/v1/messages`, `/api/paas/v4` are all recognized).
+- API keys are encrypted with **Windows DPAPI** (current user) — no plaintext in `%APPDATA%\GlassTranslate\config.json`.
+- Defaults to **DeepSeek** (works without a proxy in China, cheap); GLM's Flash-series models are free.
+- The static system prompt also benefits from each vendor's prompt-cache pricing (Anthropic explicit `cache_control` ≈ 90% off on hits, OpenAI prefix caching ≈ 50% off, DeepSeek automatic context caching ≈ 90% off), on top of the local sentence cache.
 
 ## How cost is minimized
 

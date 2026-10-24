@@ -3,9 +3,87 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="False"
-        Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        Width="480" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI, Microsoft YaHei UI">
+
+    <Window.Resources>
+        <!-- 深色下拉框 -->
+        <Style x:Key="ProvCombo" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="tb" Focusable="False" ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="bd" CornerRadius="9" Background="#E80E1219"
+                                                BorderBrush="#33FFFFFF" BorderThickness="1">
+                                            <Path Data="M 0 0 L 4 4 L 8 0" Stroke="#FFB8C0CC" StrokeThickness="1.6"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Margin="0,0,12,0"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bd" Property="BorderBrush" Value="#557DD3FC"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="cp" Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              Margin="12,0,28,0" VerticalAlignment="Center"
+                                              TextBlock.Foreground="White" IsHitTestVisible="False"/>
+                            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
+                                   AllowsTransparency="True" PopupAnimation="Fade" Margin="0,4,0,0">
+                                <Border CornerRadius="10" Background="#F5141A24"
+                                        BorderBrush="#3DFFFFFF" BorderThickness="1" Margin="0,3,0,3"
+                                        MinWidth="{TemplateBinding ActualWidth}">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#FF000000" BlurRadius="14" ShadowDepth="2" Opacity="0.45"/>
+                                    </Border.Effect>
+                                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                                        <StackPanel IsItemsHost="True"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Foreground" Value="White"/>
+                        <Setter Property="FontSize" Value="13"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ComboBoxItem">
+                                    <Border x:Name="bd" CornerRadius="7" Margin="5,2" Padding="10,7"
+                                            Background="Transparent">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bd" Property="Background" Value="#2B7DD3FC"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="bd" Property="Background" Value="#3D7DD3FC"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
     <Border CornerRadius="16" Margin="12" BorderThickness="1">
         <Border.Background>
@@ -57,15 +135,12 @@
                 </Button>
             </Grid>
 
-            <!-- 提供商 -->
+            <!-- 服务商 -->
             <StackPanel Grid.Row="1" Margin="0,0,0,10">
                 <TextBlock Text="服务商" FontSize="12" Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="SegOpenAi" Style="{StaticResource SegRadio}" GroupName="Provider"
-                                 Content="OpenAI" IsChecked="True"/>
-                    <RadioButton x:Name="SegAnthropic" Style="{StaticResource SegRadio}" GroupName="Provider"
-                                 Content="Anthropic"/>
-                </StackPanel>
+                <ComboBox x:Name="ProviderBox" Style="{StaticResource ProvCombo}"/>
+                <TextBlock x:Name="ProtoInfo" Text="协议：OpenAI 兼容" FontSize="11.5" Margin="2,7,0,0"
+                           Foreground="{StaticResource TextSubtle}"/>
             </StackPanel>
 
             <!-- API Key -->
@@ -100,15 +175,16 @@
 
             <!-- Base URL -->
             <StackPanel Grid.Row="3" Margin="0,0,0,10">
-                <TextBlock x:Name="BaseUrlLabel" Text="API 地址（可改为中转/代理地址）" FontSize="12"
+                <TextBlock Text="API 地址（已填官方默认，可改为中转/代理）" FontSize="12"
                            Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
                 <TextBox x:Name="BaseUrlBox" Style="{StaticResource DarkTextBox}"/>
             </StackPanel>
 
             <!-- 模型 -->
             <StackPanel Grid.Row="4" Margin="0,0,0,12">
-                <TextBlock Text="模型" FontSize="12" Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
-                <ComboBox x:Name="ModelBox" Style="{StaticResource DarkCombo}" IsEditable="True" Height="34"/>
+                <TextBlock Text="模型（可手动输入任意模型名）" FontSize="12"
+                           Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
+                <ComboBox x:Name="ModelBox" Style="{StaticResource ProvCombo}" IsEditable="True"/>
             </StackPanel>
 
             <!-- 测试连接 -->
@@ -116,7 +192,7 @@
                 <Button x:Name="BtnTest" Content="测试连接" Style="{StaticResource PillButton}" Width="110"/>
                 <TextBlock x:Name="TestResult" VerticalAlignment="Center" Margin="12,0,0,0"
                            FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextSubtle}"
-                           Width="290" Text=""/>
+                           Width="300" Text=""/>
             </StackPanel>
 
             <!-- 缓存 & OCR -->

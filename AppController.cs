@@ -83,9 +83,10 @@ namespace GlassTranslate
         {
             if (string.IsNullOrWhiteSpace(_cfg.ApiKey))
                 throw new ProviderException("尚未配置 API Key：点击悬浮球 → “配置 API”。");
-            return _cfg.Provider == "anthropic"
-                ? new AnthropicProvider(_cfg.AnthropicBaseUrl, _cfg.ApiKey, _cfg.AnthropicModel)
-                : new OpenAiProvider(_cfg.OpenAiBaseUrl, _cfg.ApiKey, _cfg.OpenAiModel);
+            var preset = _cfg.Preset;
+            return preset.Protocol == "anthropic"
+                ? new AnthropicProvider(_cfg.EffectiveBaseUrl, _cfg.ApiKey, _cfg.EffectiveModel)
+                : new OpenAiProvider(_cfg.EffectiveBaseUrl, _cfg.ApiKey, _cfg.EffectiveModel);
         }
 
         // ---------------- 命令（悬浮球/托盘共用） ----------------

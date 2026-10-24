@@ -28,11 +28,22 @@ namespace GlassTranslate.Core.Providers
             _endpoint = NormalizeChatUrl(baseUrl);
         }
 
+        /// <summary>
+        /// 归一化 chat/completions 端点：
+        ///  - 已带 /chat/completions → 原样
+        ///  - 带版本路径（/v1、/api/paas/v4、/compatible-mode/v1 等）→ 只补 /chat/completions
+        ///  - 裸域名 → 补 /v1/chat/completions（OpenAI 及绝大多数中转的惯例）
+        /// </summary>
         internal static string NormalizeChatUrl(string baseUrl)
         {
             var b = baseUrl.Trim().TrimEnd('/');
             if (b.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase)) return b;
-            if (b.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) return b + "/chat/completions";
+            try
+            {
+                var path = new Uri(b).AbsolutePath;
+                if (path.Length > 1) return b + "/chat/completions";
+            }
+            catch { }
             return b + "/v1/chat/completions";
         }
 

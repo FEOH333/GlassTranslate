@@ -63,7 +63,7 @@ Windows 下也可直接双击仓库根目录的 `build.bat` / `run.bat` / `publi
 ## 🚀 快速开始（3 步）
 
 1. **启动后左键点悬浮球** → 点击 **⚙ 配置 API**
-2. 选择服务商（OpenAI / Anthropic），填入 **API Key**（地址可改成中转站），点 **测试连接** 确认 ✓，保存
+2. 选择服务商（DeepSeek / 通义千问 / Kimi / GLM / OpenAI / Anthropic / 自定义），填入 **API Key**（地址可改成中转站），点 **测试连接** 确认 ✓，保存
 3. 再点悬浮球 → 开启 **启用实时全屏翻译**——屏幕上出现英文句子，旁边就会逐字打出中文
 
 > 首次使用如果没反应，请看下方 [OCR 前置条件](#-ocr-前置条件一次性)。
@@ -107,18 +107,30 @@ GlassTranslate.exe --selftest --api
 
 ## 🔑 API 配置详解
 
-| 字段 | OpenAI | Anthropic |
-|---|---|---|
-| 默认地址 | `https://api.openai.com/v1` | `https://api.anthropic.com` |
-| 默认模型 | `gpt-4o-mini` | `claude-3-5-haiku-latest` |
-| 协议兼容 | 任何 OpenAI 协议中转/网关 | 任何 Anthropic 协议中转 |
+**内置 8 个服务商预设**（设置窗口中一键切换，自动填官方地址与模型）：
 
-- **Base URL 自动归一化**：填 `https://你的中转.com`、`.../v1`、`.../v1/chat/completions`、
-  `.../v1/messages` 都能识别，直接粘贴中转站给的地址即可。
-- **模型名可自由编辑**（下拉只是预设），中转站的新模型直接手输。
-- **API Key 安全**：使用 Windows DPAPI（当前用户范围）加密后保存于
-  `%APPDATA%\GlassTranslate\config.json`，磁盘上没有明文；换电脑/换用户需重填。
-- 网络：直接走系统代理（HTTP_PROXY / 系统代理设置均生效）。
+| 预设 | 协议 | 官方地址（默认已填） | 预设模型 | Key 获取 |
+|---|---|---|---|---|
+| **DeepSeek 深度求索** | OpenAI 兼容 | `https://api.deepseek.com` | deepseek-chat | platform.deepseek.com |
+| **通义千问 · 阿里云百炼** | OpenAI 兼容 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | qwen-flash | bailian.console.aliyun.com |
+| **Kimi · 月之暗面** | OpenAI 兼容 | `https://api.moonshot.cn/v1` | kimi-k2-turbo-preview | platform.moonshot.cn |
+| **GLM · 智谱 BigModel** | OpenAI 兼容 | `https://open.bigmodel.cn/api/paas/v4` | glm-4.5-flash（免费） | bigmodel.cn |
+| **OpenAI** | OpenAI | `https://api.openai.com/v1` | gpt-4o-mini | platform.openai.com |
+| **Anthropic** | Anthropic | `https://api.anthropic.com` | claude-3-5-haiku-latest | console.anthropic.com |
+| 自定义 · OpenAI 协议 | OpenAI 兼容 | 自填（任意中转/网关） | 自填 | — |
+| 自定义 · Anthropic 协议 | Anthropic 兼容 | 自填（任意中转/网关） | 自填 | — |
+
+**要点：**
+
+- **OpenAI / Anthropic 是"协议"而非"独家"**——国内外绝大多数模型服务（DeepSeek、通义、Kimi、GLM、各类中转站）都提供 OpenAI 协议兼容端点，选对应预设、贴上该家的 Key 即可用。
+- **切换预设自动填地址 + 模型列表**，模型名可手动输入任意新模型（下拉只是预设）；每个服务商的 Key/地址/模型在会话内独立记忆，来回切换不用重贴 Key。
+- **地址可改**：任何一档都可以把地址换成中转/代理（自动识别 `/v1`、`/chat/completions`、`/v1/messages`、`/api/paas/v4` 等后缀写法）。
+- **API Key 安全**：Windows DPAPI（当前用户范围）加密后存于
+  `%APPDATA%\GlassTranslate\config.json`，磁盘无明文；换电脑/用户需重填。
+- **默认选中 DeepSeek**（国内直连可用、价格低）；GLM 的 Flash 系列模型免费。
+- 网络走系统代理，无需额外配置。
+
+**各家缓存红利**：本工具的 System Prompt 是固定静态前缀，能吃到各家的提示词缓存计费优惠——Anthropic 显式 `cache_control`（命中 1 折）、OpenAI 自动前缀缓存（5 折）、DeepSeek 自动上下文缓存（命中约 1 折）；通义/Kimi/GLM 也各有隐式或显式缓存机制。配合本工具"句子不变就不请求"的本地句库，重复内容几乎零成本。
 
 ## 💰 成本是怎么省下来的
 
