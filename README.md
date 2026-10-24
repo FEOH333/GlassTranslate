@@ -28,12 +28,6 @@ GlassTranslate 在屏幕上留一颗小小的"空心玻璃球"：
 - 译文气泡**点击穿透**，完全不挡你的操作；
 - 支持 **OpenAI** 和 **Anthropic**（Claude）官方 API 与各类中转/网关，多层缓存把成本压到最低。
 
-| 悬浮球 | 展开面板 | API 设置 |
-|:---:|:---:|:---:|
-| ![ball](docs/screenshots/ball.png) | ![panel](docs/screenshots/panel.png) | ![settings](docs/screenshots/settings.png) |
-
-> 截图为 v1.0.0 实拍（Windows 11, 144 DPI）。
-
 ## 📥 安装
 
 ### 方式一：直接下载（推荐）

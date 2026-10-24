@@ -25,12 +25,6 @@ If you work all day with **English software, English UIs and English documents**
 - Overlays are fully **click-through** — they never block you;
 - Supports **OpenAI** and **Anthropic** (Claude) official APIs and any compatible relay/gateway, with multi-layer caching to minimize cost.
 
-| Floating orb | Expanded panel | API settings |
-|:---:|:---:|:---:|
-| ![ball](docs/screenshots/ball.png) | ![panel](docs/screenshots/panel.png) | ![settings](docs/screenshots/settings.png) |
-
-> Screenshots of v1.0.0 (Windows 11, 144 DPI).
-
 ## Install
 
 ### Option 1: Download (recommended)
