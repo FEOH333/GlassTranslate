@@ -107,18 +107,20 @@ GlassTranslate.exe --selftest --api
 
 ## 🔑 API 配置详解
 
-**内置 8 个服务商预设**（设置窗口中一键切换，自动填官方地址与模型）：
+**内置 8 个服务商预设**（设置窗口中一键切换，自动填官方地址与模型；模型信息为 2026-10 现役版本）：
 
-| 预设 | 协议 | 官方地址（默认已填） | 预设模型 | Key 获取 |
+| 预设 | 协议 | 官方地址（默认已填） | 预设模型（默认加粗） | Key 获取 |
 |---|---|---|---|---|
-| **DeepSeek 深度求索** | OpenAI 兼容 | `https://api.deepseek.com` | deepseek-chat | platform.deepseek.com |
-| **通义千问 · 阿里云百炼** | OpenAI 兼容 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | qwen-flash | bailian.console.aliyun.com |
-| **Kimi · 月之暗面** | OpenAI 兼容 | `https://api.moonshot.cn/v1` | kimi-k2-turbo-preview | platform.moonshot.cn |
-| **GLM · 智谱 BigModel** | OpenAI 兼容 | `https://open.bigmodel.cn/api/paas/v4` | glm-4.5-flash（免费） | bigmodel.cn |
-| **OpenAI** | OpenAI | `https://api.openai.com/v1` | gpt-4o-mini | platform.openai.com |
-| **Anthropic** | Anthropic | `https://api.anthropic.com` | claude-3-5-haiku-latest | console.anthropic.com |
+| **DeepSeek 深度求索** | OpenAI 兼容 | `https://api.deepseek.com` | **deepseek-v4-flash**、deepseek-v4-pro | platform.deepseek.com |
+| **通义千问 · 阿里云百炼** | OpenAI 兼容 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | **qwen3.8-flash**、qwen3.7-plus、qwen3.8-max | bailian.console.aliyun.com |
+| **Kimi · 月之暗面** | OpenAI 兼容 | `https://api.moonshot.cn/v1` | **kimi-k2.6**、kimi-k3 | platform.kimi.com |
+| **GLM · 智谱 BigModel** | OpenAI 兼容 | `https://open.bigmodel.cn/api/paas/v4` | **glm-5.3-flash**、glm-4.7-flash（免费）、glm-5.3 | bigmodel.cn |
+| **OpenAI** | OpenAI | `https://api.openai.com/v1` | **gpt-5.2**、chat-latest | platform.openai.com |
+| **Anthropic** | Anthropic | `https://api.anthropic.com` | **claude-haiku-5-5**、claude-sonnet-5-5、claude-opus-5-5 | console.anthropic.com |
 | 自定义 · OpenAI 协议 | OpenAI 兼容 | 自填（任意中转/网关） | 自填 | — |
 | 自定义 · Anthropic 协议 | Anthropic 兼容 | 自填（任意中转/网关） | 自填 | — |
+
+> 默认模型均按"翻译场景够用、便宜、出字快"挑选：DeepSeek V4-Flash、qwen3.8-flash、kimi-k2.6（K3 恒定深度思考、首字慢，故默认 K2.6）、glm-5.3-flash。Kimi 旧模型（kimi-k2 系列、moonshot-v1）已于 2026-08 全线下线；DeepSeek 的 deepseek-chat/reasoner 已于 2026-07 弃用。
 
 **要点：**
 

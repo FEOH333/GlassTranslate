@@ -12,10 +12,10 @@ namespace GlassTranslate.Config
         string KeyHint);
 
     /// <summary>
-    /// 内置服务商预设。OpenAI / Anthropic 只是两种“协议”，兼容这两种协议的官方服务都内置支持：
-    /// DeepSeek、通义千问（阿里云百炼）、Kimi（月之暗面）、GLM（智谱）均为 OpenAI 协议兼容，
-    /// 直接复用 OpenAiProvider；Anthropic 协议用于 Anthropic 官方与中转。
-    /// 模型名均可自由编辑（下拉只是预设），地址、模型信息以 2026-10 官方文档为准。
+    /// 内置服务商预设（模型与端点以 2026-10 各家官方文档为准）。
+    /// OpenAI / Anthropic 只是两种"协议"：DeepSeek、通义千问（阿里云百炼）、Kimi（月之暗面）、
+    /// GLM（智谱）官方 API 均为 OpenAI 协议兼容，直接复用 OpenAiProvider；
+    /// Anthropic 协议用于 Anthropic 官方与中转。模型名均可自由编辑（下拉只是预设）。
     /// </summary>
     public static class ProviderPresets
     {
@@ -23,38 +23,38 @@ namespace GlassTranslate.Config
         {
             new("deepseek", "DeepSeek 深度求索", "openai",
                 "https://api.deepseek.com",
-                new[] { "deepseek-chat", "deepseek-reasoner", "deepseek-flash" },
-                "deepseek-chat",
+                new[] { "deepseek-v4-flash", "deepseek-v4-pro" },
+                "deepseek-v4-flash",
                 "platform.deepseek.com 申请 Key"),
 
             new("qwen", "通义千问 · 阿里云百炼", "openai",
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                new[] { "qwen-flash", "qwen-plus", "qwen-turbo", "qwen-max" },
-                "qwen-flash",
+                new[] { "qwen3.8-flash", "qwen3.7-plus", "qwen3.8-max", "qwen3.7-max" },
+                "qwen3.8-flash",
                 "百炼控制台 bailian.console.aliyun.com 申请 Key"),
 
             new("kimi", "Kimi · 月之暗面 Moonshot", "openai",
                 "https://api.moonshot.cn/v1",
-                new[] { "kimi-k2-turbo-preview", "kimi-k2-0905-preview", "kimi-k2-0711-preview", "moonshot-v1-8k" },
-                "kimi-k2-turbo-preview",
-                "platform.moonshot.cn 申请 Key"),
+                new[] { "kimi-k2.6", "kimi-k3", "kimi-k2.7-code" },
+                "kimi-k2.6",
+                "platform.kimi.com 申请 Key（k2.6 默认不思考、出字快；k3 恒定深度思考、较慢）"),
 
             new("glm", "GLM · 智谱 BigModel", "openai",
                 "https://open.bigmodel.cn/api/paas/v4",
-                new[] { "glm-4.5-flash", "glm-4.7-flash", "glm-4-flash-250414", "glm-4.6", "glm-4.5-air" },
-                "glm-4.5-flash",
-                "bigmodel.cn 申请 Key（Flash 系列免费）"),
+                new[] { "glm-5.3-flash", "glm-4.7-flash", "glm-5.3-flashx", "glm-5.3", "glm-5" },
+                "glm-5.3-flash",
+                "bigmodel.cn 申请 Key（glm-4.7-flash 免费）"),
 
             new("openai", "OpenAI（官方 / 中转）", "openai",
                 "https://api.openai.com/v1",
-                new[] { "gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1", "gpt-4o" },
-                "gpt-4o-mini",
+                new[] { "gpt-5.2", "chat-latest", "gpt-5.2-codex" },
+                "gpt-5.2",
                 "platform.openai.com 申请 Key"),
 
             new("anthropic", "Anthropic（官方 / 中转）", "anthropic",
                 "https://api.anthropic.com",
-                new[] { "claude-3-5-haiku-latest", "claude-haiku-4-5", "claude-sonnet-4-5" },
-                "claude-3-5-haiku-latest",
+                new[] { "claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5" },
+                "claude-haiku-5-5",
                 "console.anthropic.com 申请 Key"),
 
             new("custom-openai", "自定义 · OpenAI 协议", "openai",

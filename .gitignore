@@ -10,3 +10,4 @@ _*.png
 *.user
 .vs/
 GlassTranslate-v*.zip
+.release-notes.md

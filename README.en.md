@@ -90,18 +90,20 @@ If OCR is missing: **Windows Settings → Apps → Optional features → Add a f
 
 ## API configuration
 
-**8 built-in provider presets** (one click in the settings window; official base URL and model list fill in automatically):
+**8 built-in provider presets** (one click in the settings window; official base URL and model list fill in automatically; models current as of Oct 2026):
 
-| Preset | Protocol | Default base URL | Default model | Get key |
+| Preset | Protocol | Default base URL | Models (default in bold) | Get key |
 |---|---|---|---|---|
-| **DeepSeek** | OpenAI-compatible | `https://api.deepseek.com` | deepseek-chat | platform.deepseek.com |
-| **Tongyi Qwen (Alibaba)** | OpenAI-compatible | `https://dashscope.aliyuncs.com/compatible-mode/v1` | qwen-flash | bailian.console.aliyun.com |
-| **Kimi (Moonshot AI)** | OpenAI-compatible | `https://api.moonshot.cn/v1` | kimi-k2-turbo-preview | platform.moonshot.cn |
-| **GLM (Zhipu BigModel)** | OpenAI-compatible | `https://open.bigmodel.cn/api/paas/v4` | glm-4.5-flash (free) | bigmodel.cn |
-| **OpenAI** | OpenAI | `https://api.openai.com/v1` | gpt-4o-mini | platform.openai.com |
-| **Anthropic** | Anthropic | `https://api.anthropic.com` | claude-3-5-haiku-latest | console.anthropic.com |
+| **DeepSeek** | OpenAI-compatible | `https://api.deepseek.com` | **deepseek-v4-flash**, deepseek-v4-pro | platform.deepseek.com |
+| **Tongyi Qwen (Alibaba)** | OpenAI-compatible | `https://dashscope.aliyuncs.com/compatible-mode/v1` | **qwen3.8-flash**, qwen3.7-plus, qwen3.8-max | bailian.console.aliyun.com |
+| **Kimi (Moonshot AI)** | OpenAI-compatible | `https://api.moonshot.cn/v1` | **kimi-k2.6**, kimi-k3 | platform.kimi.com |
+| **GLM (Zhipu BigModel)** | OpenAI-compatible | `https://open.bigmodel.cn/api/paas/v4` | **glm-5.3-flash**, glm-4.7-flash (free), glm-5.3 | bigmodel.cn |
+| **OpenAI** | OpenAI | `https://api.openai.com/v1` | **gpt-5.2**, chat-latest | platform.openai.com |
+| **Anthropic** | Anthropic | `https://api.anthropic.com` | **claude-haiku-5-5**, claude-sonnet-5-5, claude-opus-5-5 | console.anthropic.com |
 | Custom (OpenAI protocol) | OpenAI-compatible | any relay/gateway | free-form | — |
 | Custom (Anthropic protocol) | Anthropic-compatible | any relay/gateway | free-form | — |
+
+> Default models are picked for translation duty: cheap, fast first token. Kimi's k2-series and moonshot-v1 models were all retired in Aug 2026; DeepSeek's deepseek-chat/reasoner were deprecated in Jul 2026.
 
 Key points:
 
