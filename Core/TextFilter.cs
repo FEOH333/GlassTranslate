@@ -5,8 +5,8 @@ using System.Text.RegularExpressions;
 namespace GlassTranslate.Core
 {
     /// <summary>
-    /// 判定一行 OCR 文本是否“非中文、值得翻译”，并给出归一化缓存键。
-    /// 规则刻意保守：宁可漏翻，不可把数字/路径/代码/已中文内容送去花钱翻译。
+    /// 判定一行 OCR 文本是否"非中文、值得翻译"，并给出归一化缓存键。
+    /// 规则刻意保守：宁可漏翻，不可把数字/路径/代码/已中文/图标乱码送去花钱翻译。
     /// </summary>
     internal static partial class TextFilter
     {
@@ -28,6 +28,9 @@ namespace GlassTranslate.Core
         [GeneratedRegex(@"^[\w.+-]+@[\w-]+\.[\w.]+$")]
         private static partial Regex EmailRegex();
 
+        [GeneratedRegex(@"[^A-Za-z]+")]
+        private static partial Regex NonLetterRegex();
+
         public static bool ShouldTranslate(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
@@ -45,6 +48,20 @@ namespace GlassTranslate.Core
                 int symbols = t.Count(char.IsPunctuation) + t.Count(char.IsSymbol);
                 if (symbols > t.Length / 2) return false;
             }
+            // 必须含至少一个"真词"：≥3 个字母且含元音。
+            // 过滤图标/图形 OCR 出的无元音乱码（"MCPXR"、"fr?E"）、
+            // 快捷键提示（"Ctrl + N"）和无需翻译的缩写（"API"、"CPU"、"PDF"）。
+            foreach (var token in NonLetterRegex().Split(t))
+            {
+                if (token.Length < 3) continue;
+                foreach (var c in token)
+                {
+                    var ch = char.ToLowerInvariant(c);
+                    if (ch is 'a' or 'e' or 'i' or 'o' or 'u' or 'y') goto hasRealWord;
+                }
+            }
+            return false;
+        hasRealWord:
             return true;
         }
 

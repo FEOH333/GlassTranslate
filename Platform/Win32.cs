@@ -33,6 +33,7 @@ namespace GlassTranslate.Platform
 
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
         [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
 

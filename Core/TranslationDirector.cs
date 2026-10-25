@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GlassTranslate.Core.Providers;
+using GlassTranslate.Platform;
 
 namespace GlassTranslate.Core
 {
@@ -66,6 +67,10 @@ namespace GlassTranslate.Core
         public bool OneShotActive { get; private set; }
         public string OcrLanguage => _ocrLang;
         private readonly string _ocrLang;
+
+        /// <summary>更新"不翻译"窗口区域（透传给屏幕流水线）。</summary>
+        internal void UpdatePipelineExclusions(IEnumerable<Win32.RECT> rects) =>
+            _pipeline.UpdateExclusions(rects);
 
         public event Action? OneShotStateChanged;
 

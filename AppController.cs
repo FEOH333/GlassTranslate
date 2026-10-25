@@ -64,6 +64,12 @@ namespace GlassTranslate
             _ball = new BallWindow(this);
             if (_cfg.ShowBall) _ball.Show();
 
+            // 悬浮球/面板区域变化时把自身窗口上报为"不翻译"区域（防止翻译自己界面上的文字）
+            _ball.LocationChanged += (s, e) => RefreshExclusions();
+            _ball.SizeChanged += (s, e) => RefreshExclusions();
+            _ball.IsVisibleChanged += (s, e) => RefreshExclusions();
+            RefreshExclusions();
+
             if (_cfg.HotkeyModeEnabled)
             {
                 if (!_hotkey.Register(_cfg.Hotkey))
@@ -96,12 +102,32 @@ namespace GlassTranslate
             if (_settings == null || !_settings.IsLoaded)
             {
                 _settings = new SettingsWindow(this);
+                _settings.LocationChanged += (s, e) => RefreshExclusions();
+                _settings.SizeChanged += (s, e) => RefreshExclusions();
+                _settings.IsVisibleChanged += (s, e) => RefreshExclusions();
                 _settings.Show();
+                RefreshExclusions();
             }
             else
             {
                 _settings.Activate();
             }
+        }
+
+        /// <summary>把悬浮球/设置窗的物理矩形上报给流水线，这些区域内的文字不翻译。</summary>
+        private void RefreshExclusions()
+        {
+            var rects = new List<Win32.RECT>();
+            void Add(System.Windows.Window? w)
+            {
+                if (w == null || !w.IsVisible) return;
+                var h = WindowEffects.Hwnd(w);
+                if (h != IntPtr.Zero && Win32.GetWindowRect(h, out var r) && r.Width > 0)
+                    rects.Add(r);
+            }
+            Add(_ball);
+            Add(_settings);
+            _director.UpdatePipelineExclusions(rects);
         }
 
         public void ToggleRealtime(bool on)

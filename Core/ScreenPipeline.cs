@@ -25,6 +25,7 @@ namespace GlassTranslate.Core
         public sealed class MonitorCtx
         {
             internal Win32.RECT Rect;
+            internal Win32.RECT WorkRect;   // 不含任务栏的工作区（过滤任务栏噪声）
             public uint Dpi;
             public byte[]? LastHash;
             public List<ScreenText> LastLines = new();
@@ -34,6 +35,7 @@ namespace GlassTranslate.Core
 
         private readonly OcrService _ocr;
         private readonly List<MonitorCtx> _monitors = new();
+        private readonly List<Win32.RECT> _exclusions = new();   // 工具自身窗口区域（悬浮球/设置窗）
         private readonly object _gate = new();
         private readonly SemaphoreSlim _captureLock = new(1, 1); // 轮询与一次性捕获互斥
         private CancellationTokenSource? _cts;
@@ -41,6 +43,18 @@ namespace GlassTranslate.Core
 
         /// <summary>最近一次扫描是否检测到画面变化（自适应轮询依据）。</summary>
         public bool LastScanChanged { get; private set; }
+
+        /// <summary>更新"不翻译"窗口区域（悬浮球/面板/设置窗），防止翻译自己界面上的文字。</summary>
+        internal void UpdateExclusions(IEnumerable<Win32.RECT> rects)
+        {
+            lock (_gate)
+            {
+                _exclusions.Clear();
+                _exclusions.AddRange(rects);
+                // 排除区域变化强制下一轮重新判定（清掉哈希缓存）
+                foreach (var m in _monitors) m.LastHash = null;
+            }
+        }
 
         /// <summary>实时模式下每次扫描完成触发（后台线程）。</summary>
         public event Action<List<ScreenText>>? LinesDetected;
@@ -63,7 +77,7 @@ namespace GlassTranslate.Core
                     {
                         uint dpi = 96;
                         try { Win32.GetDpiForMonitor(hmon, 0, out dpi, out _); } catch { }
-                        _monitors.Add(new MonitorCtx { Rect = info.rcMonitor, Dpi = dpi });
+                        _monitors.Add(new MonitorCtx { Rect = info.rcMonitor, WorkRect = info.rcWork, Dpi = dpi });
                     }
                     return true;
                 }, IntPtr.Zero);
@@ -169,15 +183,40 @@ namespace GlassTranslate.Core
 
             var ocrLines = await mon.Peer.RecognizeAsync(px, sw, sh);
             var lines = new List<ScreenText>();
+            double s = mon.Dpi / 96.0;
             foreach (var l in ocrLines)
             {
+                // 位置级噪声过滤（物理像素，DPI 感知）：
+                //  - 整行落在任务栏带内（工作区之外）→ 任务栏时间/图标/托盘噪声
+                //  - 过小包围盒 → 图标碎片/残影
+                double lx = l.X * scale, ly = l.Y * scale,
+                       lw = l.Width * scale, lh = l.Height * scale;
+                int absX = r.Left + (int)Math.Round(lx), absY = r.Top + (int)Math.Round(ly);
+                if (ly + r.Top >= mon.WorkRect.Bottom - 2) continue;
+                if (lw < 30 * s || lh < 12 * s) continue;
+
+                // 与工具自身窗口相交 → 自己界面上的文字不翻
+                bool excluded = false;
+                lock (_gate)
+                {
+                    foreach (var ex in _exclusions)
+                    {
+                        if (absX < ex.Right + 8 && absX + lw > ex.Left - 8 &&
+                            absY < ex.Bottom + 8 && absY + lh > ex.Top - 8)
+                        {
+                            excluded = true;
+                            break;
+                        }
+                    }
+                }
+                if (excluded) continue;
+
                 if (!TextFilter.ShouldTranslate(l.Text)) continue;
                 lines.Add(new ScreenText(
                     l.Text,
-                    r.Left + (int)Math.Round(l.X * scale),
-                    r.Top + (int)Math.Round(l.Y * scale),
-                    (int)Math.Round(l.Width * scale),
-                    (int)Math.Round(l.Height * scale),
+                    absX, absY,
+                    (int)Math.Round(lw),
+                    (int)Math.Round(lh),
                     _monitors.IndexOf(mon)));
             }
             mon.LastLines = lines;
