@@ -57,6 +57,17 @@ namespace GlassTranslate.Core
             catch { return null; }
         }
 
+        /// <summary>用同一语言再建一个引擎实例（多显示器并行扫描时每屏一个，WinRT 引擎不保证跨线程并发安全）。</summary>
+        public OcrService? CreatePeer()
+        {
+            try
+            {
+                var e = OcrEngine.TryCreateFromLanguage(new Language(EngineLanguage));
+                return e == null ? null : new OcrService(e, EngineLanguage);
+            }
+            catch { return null; }
+        }
+
         /// <summary>识别一帧 BGRA 位图，返回每行文本与包围盒（位图像素坐标）。</summary>
         public async Task<List<OcrLineResult>> RecognizeAsync(byte[] bgra, int w, int h)
         {

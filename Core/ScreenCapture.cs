@@ -12,7 +12,7 @@ namespace GlassTranslate.Core
     internal static class ScreenCapture
     {
         public static byte[] CaptureSmart(int x, int y, int w, int h, int maxDim,
-            out int sw, out int sh, out double scale)
+            out int sw, out int sh, out double scale, byte[]? reuse = null)
         {
             sw = w; sh = h;
             while (Math.Max(sw, sh) > Math.Max(64, maxDim))
@@ -50,7 +50,9 @@ namespace GlassTranslate.Core
                     Win32.SetStretchBltMode(memDc, 4); // HALFTONE
                     Win32.StretchBlt(memDc, 0, 0, sw, sh, screenDc, x, y, w, h, Win32.SRCCOPY | Win32.CAPTUREBLT);
                 }
-                px = new byte[sw * sh * 4];
+                px = reuse is { Length: > 0 } buf && buf.Length == sw * sh * 4
+                    ? buf
+                    : new byte[sw * sh * 4];
                 Marshal.Copy(bits, px, 0, px.Length);
                 Win32.SelectObject(memDc, old);
                 Win32.DeleteObject(dib);

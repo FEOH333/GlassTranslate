@@ -204,6 +204,8 @@
                 <StackPanel>
                     <TextBlock x:Name="CacheInfo" Text="本地缓存：0 条" FontSize="12"
                                Foreground="{StaticResource TextSubtle}"/>
+                    <TextBlock x:Name="UsageInfo" Text="累计翻译 0 句" FontSize="12"
+                               Foreground="{StaticResource TextSubtle}" Margin="0,3,0,0"/>
                     <TextBlock x:Name="OcrInfo" Text="OCR 引擎：…" FontSize="12"
                                Foreground="{StaticResource TextSubtle}" Margin="0,3,0,0"/>
                 </StackPanel>

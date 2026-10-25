@@ -35,7 +35,22 @@ namespace GlassTranslate.Core
             catch { /* 损坏则视为空缓存 */ }
         }
 
-        public string? Get(string key) { lock (_gate) return _map.GetValueOrDefault(key); }
+        /// <summary>本次会话缓存命中次数（供用量统计展示）。</summary>
+        public long CacheHits { get; private set; }
+
+        public string? Get(string key)
+        {
+            lock (_gate)
+            {
+                if (_map.TryGetValue(key, out var v))
+                {
+                    CacheHits++;
+                    return v;
+                }
+                return null;
+            }
+        }
+
         public bool Has(string key) { lock (_gate) return _map.ContainsKey(key); }
 
         public void Put(string key, string value)

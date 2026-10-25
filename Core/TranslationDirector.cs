@@ -229,6 +229,7 @@ namespace GlassTranslate.Core
                             {
                                 _cache.Put(target.Key, finalText);
                                 completed.Add(target.Key);
+                                UsageStats.AddLine();
                                 _sink.OnTranslationDone(target.Key);
                             }
                         }, _shutdown.Token);

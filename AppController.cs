@@ -222,6 +222,16 @@ namespace GlassTranslate
 
         public void ClearCache() => _cache.Clear();
 
+        /// <summary>用量汇总（设置窗口展示）。</summary>
+        public string UsageSummary
+        {
+            get
+            {
+                var (api, lines, hits) = UsageStats.Snapshot();
+                return $"累计翻译 {lines} 句 · API 调用 {api} 次 · 本次缓存命中 {hits} 次";
+            }
+        }
+
         /// <summary>一键清除屏幕上全部译文气泡（悬浮球中键 / 右键菜单 / 托盘）。</summary>
         public void ClearTranslations() => _overlay.ClearAll();
 
@@ -232,6 +242,7 @@ namespace GlassTranslate
                 _cfg.RealtimeEnabled = _director.RealtimeRunning;
                 SaveConfig();
                 _cache.Flush();
+                UsageStats.Flush();
                 _director.Dispose();
                 _tray.Dispose();
                 _hotkey.Unregister();

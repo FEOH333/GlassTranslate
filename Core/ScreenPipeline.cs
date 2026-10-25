@@ -13,7 +13,12 @@ namespace GlassTranslate.Core
 
     /// <summary>
     /// 屏幕流水线：轮询 捕获 → 变化检测 → OCR → 过滤，输出“当前屏幕上的非中文行”快照。
-    /// 关键省电点：画面没变（对采样像素做 SHA256）就完全跳过 OCR，静止画面下 CPU 占用≈0。
+    ///
+    /// v1.4 优化：
+    ///  - 自适应轮询：画面连续无变化时轮询间隔按 1.6 倍指数拉长（上限 4s），
+    ///    一有变化立刻回到基础间隔——静止画面下 CPU 占用进一步趋近于 0；
+    ///  - 多显示器并行：每屏独立线程 + 独立 OCR 引擎（WinRT 引擎不保证并发安全）；
+    ///  - 像素缓冲复用：同尺寸帧不再每轮新分配 8MB+ 数组。
     /// </summary>
     public sealed class ScreenPipeline : IDisposable
     {
@@ -23,6 +28,8 @@ namespace GlassTranslate.Core
             public uint Dpi;
             public byte[]? LastHash;
             public List<ScreenText> LastLines = new();
+            internal byte[]? Buffer;
+            internal OcrService? Peer;
         }
 
         private readonly OcrService _ocr;
@@ -31,6 +38,9 @@ namespace GlassTranslate.Core
         private readonly SemaphoreSlim _captureLock = new(1, 1); // 轮询与一次性捕获互斥
         private CancellationTokenSource? _cts;
         private Thread? _loop;
+
+        /// <summary>最近一次扫描是否检测到画面变化（自适应轮询依据）。</summary>
+        public bool LastScanChanged { get; private set; }
 
         /// <summary>实时模式下每次扫描完成触发（后台线程）。</summary>
         public event Action<List<ScreenText>>? LinesDetected;
@@ -86,6 +96,7 @@ namespace GlassTranslate.Core
 
         private async void RunLoop(int intervalMs, CancellationToken ct)
         {
+            int stableRounds = 0;
             while (!ct.IsCancellationRequested)
             {
                 try
@@ -94,56 +105,83 @@ namespace GlassTranslate.Core
                     LinesDetected?.Invoke(all);
                 }
                 catch { /* 单帧失败不影响下一轮 */ }
-                try { await Task.Delay(intervalMs, ct); } catch { break; }
+
+                int delay = intervalMs;
+                if (!LastScanChanged)
+                {
+                    stableRounds++;
+                    delay = (int)Math.Min(intervalMs * Math.Pow(1.6, stableRounds), 4000.0);
+                }
+                else stableRounds = 0;
+
+                try { await Task.Delay(delay, ct); } catch { break; }
             }
         }
 
-        /// <summary>扫描全部显示器一次（快捷键全屏翻译也走这里）。</summary>
+        /// <summary>扫描全部显示器一次（快捷键全屏翻译也走这里）。多屏并行。</summary>
         public async Task<List<ScreenText>> CaptureOnceAsync()
         {
             var merged = new List<ScreenText>();
+            bool anyChanged = false;
             await _captureLock.WaitAsync();
             try
             {
                 List<MonitorCtx> monitors;
                 lock (_gate) monitors = _monitors.ToList();
-                for (int idx = 0; idx < monitors.Count; idx++)
+                if (monitors.Count == 1)
                 {
-                    var mon = monitors[idx];
-                    var r = mon.Rect;
-                    if (r.Width <= 0 || r.Height <= 0) continue;
-
-                    var px = ScreenCapture.CaptureSmart(r.Left, r.Top, r.Width, r.Height,
-                        _ocr.MaxDimension, out int sw, out int sh, out double scale);
-                    var hash = QuickHash(px, sw, sh);
-
-                    if (mon.LastHash != null && hash.AsSpan().SequenceEqual(mon.LastHash))
-                    {
-                        // 画面没变：复用上次结果（同样代表“这些文本还在屏幕上”）
-                        merged.AddRange(mon.LastLines);
-                        continue;
-                    }
-                    mon.LastHash = hash;
-
-                    var ocrLines = await _ocr.RecognizeAsync(px, sw, sh);
-                    var lines = new List<ScreenText>();
-                    foreach (var l in ocrLines)
-                    {
-                        if (!TextFilter.ShouldTranslate(l.Text)) continue;
-                        lines.Add(new ScreenText(
-                            l.Text,
-                            r.Left + (int)Math.Round(l.X * scale),
-                            r.Top + (int)Math.Round(l.Y * scale),
-                            (int)Math.Round(l.Width * scale),
-                            (int)Math.Round(l.Height * scale),
-                            idx));
-                    }
-                    mon.LastLines = lines;
+                    var (lines, changed) = await ScanMonitor(monitors[0]);
                     merged.AddRange(lines);
+                    anyChanged = changed;
+                }
+                else
+                {
+                    var results = await Task.WhenAll(monitors.Select(m => Task.Run(() => ScanMonitor(m))));
+                    foreach (var (lines, changed) in results)
+                    {
+                        merged.AddRange(lines);
+                        anyChanged |= changed;
+                    }
                 }
             }
             finally { _captureLock.Release(); }
+            LastScanChanged = anyChanged;
             return merged;
+        }
+
+        private async Task<(List<ScreenText> Lines, bool Changed)> ScanMonitor(MonitorCtx mon)
+        {
+            var r = mon.Rect;
+            if (r.Width <= 0 || r.Height <= 0) return (new List<ScreenText>(), false);
+            mon.Peer ??= _ocr.CreatePeer() ?? _ocr;
+
+            var px = ScreenCapture.CaptureSmart(r.Left, r.Top, r.Width, r.Height,
+                mon.Peer.MaxDimension, out int sw, out int sh, out double scale, mon.Buffer);
+            mon.Buffer = px;
+
+            var hash = QuickHash(px, sw, sh);
+            if (mon.LastHash != null && hash.AsSpan().SequenceEqual(mon.LastHash))
+            {
+                // 画面没变：复用上次结果（同样代表“这些文本还在屏幕上”）
+                return (mon.LastLines, false);
+            }
+            mon.LastHash = hash;
+
+            var ocrLines = await mon.Peer.RecognizeAsync(px, sw, sh);
+            var lines = new List<ScreenText>();
+            foreach (var l in ocrLines)
+            {
+                if (!TextFilter.ShouldTranslate(l.Text)) continue;
+                lines.Add(new ScreenText(
+                    l.Text,
+                    r.Left + (int)Math.Round(l.X * scale),
+                    r.Top + (int)Math.Round(l.Y * scale),
+                    (int)Math.Round(l.Width * scale),
+                    (int)Math.Round(l.Height * scale),
+                    _monitors.IndexOf(mon)));
+            }
+            mon.LastLines = lines;
+            return (lines, true);
         }
 
         /// <summary>稀疏采样哈希：画面可见变化才重新 OCR。</summary>

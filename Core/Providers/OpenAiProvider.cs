@@ -100,6 +100,7 @@ namespace GlassTranslate.Core.Providers
                 }
                 throw new ProviderException($"[{Name}] HTTP {code}: {Short(err)}");
             }
+            UsageStats.AddApiCall();
 
             using (resp)
             {

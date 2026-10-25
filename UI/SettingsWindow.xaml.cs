@@ -88,6 +88,7 @@ namespace GlassTranslate.UI
             ApplyDraft(preset.Id);
 
             CacheInfo.Text = $"本地缓存：{_controller.CacheCount} 条（命中的句子不再调用 API）";
+            UsageInfo.Text = _controller.UsageSummary;
             OcrInfo.Text = _controller.OcrLanguage is { Length: > 0 } lang
                 ? $"OCR 引擎：{lang}"
                 : "OCR 引擎：未检测到英文 OCR（Windows 设置 → 应用 → 可选功能 → 添加）";
