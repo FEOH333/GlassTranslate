@@ -41,7 +41,7 @@
                                     <DataTrigger.EnterActions>
                                         <BeginStoryboard>
                                             <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.22"/>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12"/>
                                             </Storyboard>
                                         </BeginStoryboard>
                                     </DataTrigger.EnterActions>

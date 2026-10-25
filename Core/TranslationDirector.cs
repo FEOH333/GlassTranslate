@@ -92,7 +92,7 @@ namespace GlassTranslate.Core
             if (_realtimeRunning) return;
             _realtimeRunning = true;
             _pipeline.Start(intervalMs);
-            _flushTimer = new Timer(_ => _ = FlushLoopAsync(), null, 400, 500);
+            _flushTimer = new Timer(_ => _ = FlushLoopAsync(), null, 200, 300);
         }
 
         public void StopRealtime()

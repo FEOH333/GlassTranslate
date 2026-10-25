@@ -64,5 +64,45 @@ namespace GlassTranslate.Core
             for (int i = 3; i < px.Length; i += 4) px[i] = 255;
             return px;
         }
+        /// <summary>
+        /// 运动探针截图：宽约 240px 的低清帧，不含 CAPTUREBLT/层叠窗口
+        /// （自己的译文气泡不会触发自循环），单屏约 2-4ms。
+        /// </summary>
+        public static byte[] CaptureTiny(int x, int y, int w, int h, byte[]? reuse, out int tw, out int th)
+        {
+            tw = Math.Min(Math.Max(64, w * 240 / Math.Max(1, w)), w);
+            th = Math.Max(1, (int)((long)h * tw / w));
+
+            var screenDc = Win32.GetDC(IntPtr.Zero);
+            var memDc = Win32.CreateCompatibleDC(screenDc);
+            var bmi = new Win32.BITMAPINFO
+            {
+                bmiHeader = new Win32.BITMAPINFOHEADER
+                {
+                    biSize = (uint)Marshal.SizeOf<Win32.BITMAPINFOHEADER>(),
+                    biWidth = tw,
+                    biHeight = -th,
+                    biPlanes = 1,
+                    biBitCount = 32,
+                    biCompression = Win32.BI_RGB
+                }
+            };
+            var dib = Win32.CreateDIBSection(screenDc, ref bmi, Win32.DIB_RGB_COLORS, out var bits, IntPtr.Zero, 0);
+            byte[] px = Array.Empty<byte>();
+            if (dib != IntPtr.Zero && bits != IntPtr.Zero)
+            {
+                var old = Win32.SelectObject(memDc, dib);
+                Win32.SetStretchBltMode(memDc, 3); // COLORONCOLOR：快
+                Win32.StretchBlt(memDc, 0, 0, tw, th, screenDc, x, y, w, h, Win32.SRCCOPY);
+                px = reuse is { Length: > 0 } buf && buf.Length == tw * th * 4 ? buf : new byte[tw * th * 4];
+                Marshal.Copy(bits, px, 0, px.Length);
+                Win32.SelectObject(memDc, old);
+                Win32.DeleteObject(dib);
+            }
+            Win32.DeleteDC(memDc);
+            Win32.ReleaseDC(IntPtr.Zero, screenDc);
+            for (int i = 3; i < px.Length; i += 4) px[i] = 255;
+            return px;
+        }
     }
 }

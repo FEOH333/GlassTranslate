@@ -20,7 +20,8 @@ namespace GlassTranslate.UI
     /// </summary>
     internal sealed class OverlayController : ITranslationSink
     {
-        private const int MaxTooltips = 120;
+        private const int MaxTooltips = 64;
+        private const int DenseLineThreshold = 18;   // 同屏行数超过此值视为密集场景
 
         private readonly TranslationCache _cache;
         private readonly Dispatcher _ui = Application.Current.Dispatcher;
@@ -78,12 +79,16 @@ namespace GlassTranslate.UI
                 var list = _realtime.GetValueOrDefault(normKey);
                 list ??= _oneShot.GetValueOrDefault(normKey);
                 if (list == null) return;
-                foreach (var vm in list)
+                foreach (var vm in list.ToList())
                 {
                     bool firstChunk = vm.Text == "…";
                     vm.AppendDelta(delta);
-                    // 首个字符到达后译文长度已知，按实测尺寸重摆一次
-                    if (firstChunk) Reposition(vm, vm.Source, _lastFrame);
+                    // 首个字符到达后译文长度已知，按实测尺寸重摆一次；放不下则退场
+                    if (firstChunk && !Reposition(vm, vm.Source, _lastFrame))
+                    {
+                        list.Remove(vm);
+                        RemoveVm(vm);
+                    }
                 }
             });
 
@@ -154,15 +159,22 @@ namespace GlassTranslate.UI
                     best.Matched = true;
                     bool moved = Math.Abs(best.Source.X - line.X) + Math.Abs(best.Source.Y - line.Y) > 12;
                     best.Source = line;
-                    if (moved) Reposition(best, line, frame);
+                    if (moved && !Reposition(best, line, frame))
+                    {
+                        // 位置放不下（密集场景）→ 该气泡退场
+                        vms.Remove(best);
+                        RemoveVm(best);
+                        continue;
+                    }
                 }
                 else if (total < MaxTooltips)
                 {
                     var nv = new TooltipVm(TextFilter.NormalizeKey(line.Text), line,
                         _cache.Get(TextFilter.NormalizeKey(line.Text)));
+                    AddToWindow(nv, frame);
+                    if (!nv.PlacedOk) continue;   // 放不下：不登记
                     vms.Add(nv);
                     total++;
-                    AddToWindow(nv, frame);
                 }
             }
             foreach (var unmatched in remaining.Where(v => !v.Matched).ToList())
@@ -184,8 +196,9 @@ namespace GlassTranslate.UI
                 if (vms.Count >= 6 || TotalCount() >= MaxTooltips) continue;
                 var cached = _cache.Get(key);
                 var vm = new TooltipVm(key, line, cached);
-                vms.Add(vm);
                 AddToWindow(vm, lines);
+                if (!vm.PlacedOk) continue;
+                vms.Add(vm);
             }
         }
 
@@ -220,24 +233,27 @@ namespace GlassTranslate.UI
         private void AddToWindow(TooltipVm vm, List<ScreenText> frameLines)
         {
             var w = GetWindow(vm.Source.MonitorIndex);
-            var (px, py) = Place(vm, vm.Source, frameLines, w);
-            vm.X = w.ToDip(px);
-            vm.Y = w.ToDip(py);
+            var pos = Place(vm, vm.Source, frameLines, w);
+            if (pos == null) return;   // 密集场景放不下：不放，避免堆叠错乱
+            vm.X = w.ToDip(pos.Value.px);
+            vm.Y = w.ToDip(pos.Value.py);
             w.Add(vm);
+            vm.PlacedOk = true;
         }
 
-        private void Reposition(TooltipVm vm, ScreenText line, List<ScreenText> frameLines)
+        private bool Reposition(TooltipVm vm, ScreenText line, List<ScreenText> frameLines)
         {
             var w = GetWindow(line.MonitorIndex);
-            var (px, py) = Place(vm, line, frameLines, w);
-            vm.X = w.ToDip(px);
-            vm.Y = w.ToDip(py);
+            var pos = Place(vm, line, frameLines, w);
+            if (pos == null) return false;
+            vm.MoveTo(w.ToDip(pos.Value.px), w.ToDip(pos.Value.py));
+            return true;
         }
 
         private void RemoveVm(TooltipVm vm)
         {
             vm.Dying = true;
-            var t = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(240) };
+            var t = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(130) };
             t.Tick += (s, e) =>
             {
                 t.Stop();
@@ -262,19 +278,21 @@ namespace GlassTranslate.UI
         // ---------------- 摆位算法 ----------------
 
         /// <summary>
-        /// 摆位：下方 → 上方 → 右侧 → 兜底覆盖原文；
-        /// 候选位置与同屏其他 OCR 行、已放置气泡求交，全部冲突才降级。
+        /// 摆位：下方 → 上方 → 右侧；密集画面（同屏行数多）不再兜底覆盖原文，
+        /// 全部冲突时返回 null（放不下就不放，宁缺毋滥）。
         /// </summary>
-        private (int px, int py) Place(TooltipVm vm, ScreenText line, List<ScreenText> frameLines, OverlayWindow w)
+        private (int px, int py)? Place(TooltipVm vm, ScreenText line, List<ScreenText> frameLines, OverlayWindow w)
         {
             var mon = w.PixelRect;
             var dip = w.Dpi / 96.0;
             var (estW, estH) = MeasureBubble(vm, dip);
 
             var blocked = new List<(double X, double Y, double W, double H)>();
+            int sameMonitorLines = 0;
             foreach (var l in frameLines)
             {
                 if (l.MonitorIndex != w.MonitorIndex) continue;
+                sameMonitorLines++;
                 if (l.X == line.X && l.Y == line.Y && l.Text == line.Text) continue;
                 blocked.Add((l.X, l.Y, l.Width, l.Height));
             }
@@ -284,25 +302,26 @@ namespace GlassTranslate.UI
                         if (other != vm && !other.Dying && other.Source.MonitorIndex == w.MonitorIndex)
                             blocked.Add(other.Placed);
 
+            bool allowCover = sameMonitorLines <= DenseLineThreshold;
             double Gap = 6 * dip;
             var candidates = new (double X, double Y)[]
             {
                 (line.X, line.Y + line.Height + Gap),          // 下方
                 (line.X, line.Y - estH - Gap),                 // 上方
-                (line.X + line.Width + Gap, line.Y),           // 右侧
-                (line.X, line.Y + 2)                           // 兜底：覆盖原文
+                (line.X + line.Width + Gap, line.Y)            // 右侧
             };
 
             foreach (var c in candidates)
             {
                 var x = Math.Clamp(c.X, mon.Left + 6, mon.Right - estW - 6);
                 var y = Math.Clamp(c.Y, mon.Top + 6, mon.Bottom - estH - 6);
-                if (c == candidates[3] || !IntersectsAny(x, y, estW, estH, blocked, 4 * dip))
+                if (!IntersectsAny(x, y, estW, estH, blocked, 4 * dip))
                 {
                     vm.Placed = (x, y, estW, estH);
                     return ((int)(x - mon.Left), (int)(y - mon.Top));
                 }
             }
+            if (!allowCover) return null;
             vm.Placed = (line.X, line.Y, estW, estH);
             return ((int)(line.X - mon.Left), (int)(line.Y - mon.Top));
         }

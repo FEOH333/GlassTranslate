@@ -23,6 +23,8 @@ namespace GlassTranslate.UI
         public ScreenText Source { get; set; }
         /// <summary>帧同步时的贪心匹配标记（OverlayController 用）。</summary>
         public bool Matched;
+        /// <summary>是否成功摆位（密集场景放不下则不显示）。</summary>
+        public bool PlacedOk;
         /// <summary>预估摆放矩形（该显示器的物理像素），供后续气泡避让。</summary>
         public (double X, double Y, double W, double H) Placed { get; set; }
 
@@ -70,6 +72,39 @@ namespace GlassTranslate.UI
         {
             _chars.Clear();
             if (_text == "…") Text = "⚠ 未能翻译";
+        }
+
+        private DispatcherTimer? _moveTimer;
+
+        /// <summary>
+        /// 平滑移动到新位置（约 96ms 缓动，滚动跟随时气泡"滑"过去而不是跳变）。
+        /// 大幅跳变（>260px，如换页重排）直接贴过去。
+        /// </summary>
+        public void MoveTo(double x, double y)
+        {
+            if (Math.Abs(x - X) < 0.5 && Math.Abs(y - Y) < 0.5) return;
+            if (Math.Abs(x - X) > 260 || Math.Abs(y - Y) > 260)
+            {
+                _moveTimer?.Stop();
+                X = x; Y = y;
+                return;
+            }
+            double sx = X, sy = Y, dx = x - sx, dy = y - sy;
+            _moveTimer?.Stop();
+            var t = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(16) };
+            int step = 0;
+            const int total = 6;
+            t.Tick += (s, e) =>
+            {
+                step++;
+                double k = step / (double)total;
+                k = 1 - (1 - k) * (1 - k);   // ease-out
+                X = sx + dx * k;
+                Y = sy + dy * k;
+                if (step >= total) { t.Stop(); X = x; Y = y; }
+            };
+            t.Start();
+            _moveTimer = t;
         }
     }
 }
