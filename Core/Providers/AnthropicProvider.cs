@@ -15,17 +15,24 @@ namespace GlassTranslate.Core.Providers
     /// </summary>
     public sealed class AnthropicProvider : ITranslationProvider
     {
-        private readonly HttpClient _http;
+        /// <summary>全进程共享；鉴权按请求注入。</summary>
+        private static readonly HttpClient Http = new(new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10)
+        })
+        { Timeout = TimeSpan.FromSeconds(120) };
+
+        private static readonly int[] BackoffMs = { 900, 2600 };
+
         private readonly string _endpoint;
         private readonly string _model;
+        private readonly string _apiKey;
         public string Name => "Anthropic";
 
         public AnthropicProvider(string baseUrl, string apiKey, string model)
         {
-            _model = string.IsNullOrWhiteSpace(model) ? "claude-3-5-haiku-latest" : model;
-            _http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
-            _http.DefaultRequestHeaders.TryAddWithoutValidation("x-api-key", apiKey);
-            _http.DefaultRequestHeaders.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+            _model = string.IsNullOrWhiteSpace(model) ? "claude-haiku-5-5" : model;
+            _apiKey = apiKey;
             _endpoint = NormalizeMessagesUrl(baseUrl);
         }
 
@@ -58,18 +65,39 @@ namespace GlassTranslate.Core.Providers
                     new { role = "user", content = PromptCatalog.BuildUserPrompt(lines) }
                 }
             });
-            using var req = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+            HttpResponseMessage resp;
+            int attempt = 0;
+            while (true)
             {
-                Content = new StringContent(body, Encoding.UTF8, "application/json")
-            };
-            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-            if (!resp.IsSuccessStatusCode)
-            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "application/json")
+                };
+                req.Headers.TryAddWithoutValidation("x-api-key", _apiKey);
+                req.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+                try
+                {
+                    resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                }
+                catch (HttpRequestException) when (attempt < BackoffMs.Length)
+                {
+                    await Task.Delay(BackoffMs[attempt++] + Random.Shared.Next(250), ct);
+                    continue;
+                }
+                if (resp.IsSuccessStatusCode) break;
                 var err = await resp.Content.ReadAsStringAsync(ct);
-                throw new ProviderException($"[{Name}] HTTP {(int)resp.StatusCode}: {Short(err)}");
+                int code = (int)resp.StatusCode;
+                resp.Dispose();
+                if (attempt < BackoffMs.Length && (code == 429 || code >= 500))
+                {
+                    await Task.Delay(BackoffMs[attempt++] + Random.Shared.Next(250), ct);
+                    continue;
+                }
+                throw new ProviderException($"[{Name}] HTTP {code}: {Short(err)}");
             }
-
-            var parser = new StreamLineParser(onLine);
+            using (resp)
+            {
+                var parser = new StreamLineParser(onLine);
             await SseClient.ReadAsync(resp, async payload =>
             {
                 try
@@ -97,7 +125,8 @@ namespace GlassTranslate.Core.Providers
                 catch { }
                 await Task.CompletedTask;
             }, ct);
-            parser.Finish();
+                parser.Finish();
+            }
         }
 
         public async Task<(bool Ok, string Message)> TestAsync(CancellationToken ct)

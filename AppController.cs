@@ -86,7 +86,7 @@ namespace GlassTranslate
             var preset = _cfg.Preset;
             return preset.Protocol == "anthropic"
                 ? new AnthropicProvider(_cfg.EffectiveBaseUrl, _cfg.ApiKey, _cfg.EffectiveModel)
-                : new OpenAiProvider(_cfg.EffectiveBaseUrl, _cfg.ApiKey, _cfg.EffectiveModel);
+                : new OpenAiProvider(_cfg.EffectiveBaseUrl, _cfg.ApiKey, _cfg.EffectiveModel, preset.NoThinking);
         }
 
         // ---------------- 命令（悬浮球/托盘共用） ----------------

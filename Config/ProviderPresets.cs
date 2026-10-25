@@ -9,7 +9,8 @@ namespace GlassTranslate.Config
         string BaseUrl,
         string[] Models,
         string DefaultModel,
-        string KeyHint);
+        string KeyHint,
+        bool NoThinking = false);   // 发送 enable_thinking:false（通义 Qwen3 系列默认开思考，翻译场景必须关）
 
     /// <summary>
     /// 内置服务商预设（模型与端点以 2026-10 各家官方文档为准）。
@@ -29,9 +30,10 @@ namespace GlassTranslate.Config
 
             new("qwen", "通义千问 · 阿里云百炼", "openai",
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                new[] { "qwen3.8-flash", "qwen3.7-plus", "qwen3.8-max", "qwen3.7-max" },
+                new[] { "qwen3.8-flash", "qwen3.8-omni-flash", "qwen3.7-plus", "qwen3.8-max" },
                 "qwen3.8-flash",
-                "百炼控制台 bailian.console.aliyun.com 申请 Key"),
+                "百炼控制台 bailian.console.aliyun.com 申请 Key",
+                NoThinking: true),
 
             new("kimi", "Kimi · 月之暗面 Moonshot", "openai",
                 "https://api.moonshot.cn/v1",

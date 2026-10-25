@@ -108,7 +108,7 @@ namespace GlassTranslate
                         var preset = GlassTranslate.Config.ProviderPresets.ById(cfg.ProviderId);
                         ITranslationProvider pv = preset.Protocol == "anthropic"
                             ? new AnthropicProvider(cfg.EffectiveBaseUrl, cfg.ApiKey, cfg.EffectiveModel)
-                            : new OpenAiProvider(cfg.EffectiveBaseUrl, cfg.ApiKey, cfg.EffectiveModel);
+                            : new OpenAiProvider(cfg.EffectiveBaseUrl, cfg.ApiKey, cfg.EffectiveModel, preset.NoThinking);
                         var (okApi, msg) = pv.TestAsync(CancellationToken.None).GetAwaiter().GetResult();
                         W($"API [{preset.DisplayName} / {cfg.EffectiveModel}]: {(okApi ? "✓ " : "✗ ")}{msg}");
                     }

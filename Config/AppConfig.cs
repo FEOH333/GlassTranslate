@@ -43,7 +43,12 @@ namespace GlassTranslate.Config
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GlassTranslate");
         private static string CfgPath => Path.Combine(Dir, "config.json");
         public static string CachePath => Path.Combine(Dir, "translation-cache.json");
-        private static readonly JsonSerializerOptions J = new() { WriteIndented = true };
+        // AllowNamedFloatingPointLiterals：BallLeft/Top 未拖动过时是 NaN，需要按字面量读写
+        private static readonly JsonSerializerOptions J = new()
+        {
+            WriteIndented = true,
+            NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals
+        };
 
         public static AppConfig Load()
         {
@@ -52,7 +57,7 @@ namespace GlassTranslate.Config
             {
                 if (File.Exists(CfgPath))
                 {
-                    var loaded = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(CfgPath));
+                    var loaded = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(CfgPath), J);
                     if (loaded != null) cfg = loaded;
                 }
             }

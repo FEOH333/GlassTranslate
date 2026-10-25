@@ -23,6 +23,14 @@ namespace GlassTranslate
                 return;
             }
 
+            if (e.Args.Length > 0 && e.Args[0].Equals("--config", StringComparison.OrdinalIgnoreCase))
+            {
+                try { Win32.AttachConsole(Win32.ATTACH_PARENT_PROCESS); } catch { }
+                Config.HeadlessConfig.Apply(e.Args.Skip(1).ToArray());
+                Shutdown();
+                return;
+            }
+
             _mutex = new Mutex(true, "Local\\GlassTranslate_SingleInstance", out bool isNew);
             if (!isNew)
             {
