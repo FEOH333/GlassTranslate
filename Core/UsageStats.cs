@@ -19,8 +19,6 @@ namespace GlassTranslate.Core
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData),
                 "GlassTranslate"), "usage.json");
 
-        public static long CacheHits { get; internal set; }
-
         public static void AddApiCall()
         {
             lock (Gate) { Load(); _apiCalls++; MaybeSave(); }
@@ -31,12 +29,12 @@ namespace GlassTranslate.Core
             lock (Gate) { Load(); _linesTranslated++; }
         }
 
-        public static (long ApiCalls, long Lines, long CacheHitsThisSession) Snapshot()
+        public static (long ApiCalls, long Lines) Snapshot()
         {
             lock (Gate)
             {
                 Load();
-                return (_apiCalls, _linesTranslated, CacheHits);
+                return (_apiCalls, _linesTranslated);
             }
         }
 

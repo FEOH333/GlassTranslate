@@ -61,7 +61,14 @@ namespace GlassTranslate
                 var dir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GlassTranslate");
                 Directory.CreateDirectory(dir);
-                File.AppendAllText(Path.Combine(dir, "error.log"),
+                var path = Path.Combine(dir, "error.log");
+                // 防无限增长：超过 256KB 只保留后半段
+                if (File.Exists(path) && new FileInfo(path).Length > 256 * 1024)
+                {
+                    var tail = File.ReadAllText(path);
+                    File.WriteAllText(path, tail.Length > 128 * 1024 ? tail[^ (128 * 1024)..] : tail);
+                }
+                File.AppendAllText(path,
                     $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n\r\n");
             }
             catch { }

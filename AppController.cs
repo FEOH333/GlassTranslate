@@ -186,6 +186,7 @@ namespace GlassTranslate
             {
                 _hotkey.Unregister();
                 _cfg.HotkeyModeEnabled = false;
+                _director.ClearOneShot();   // 关闭时清掉可能还在屏幕上的一次性译文
             }
             SaveConfig();
             SyncUi();
@@ -253,8 +254,8 @@ namespace GlassTranslate
         {
             get
             {
-                var (api, lines, hits) = UsageStats.Snapshot();
-                return $"累计翻译 {lines} 句 · API 调用 {api} 次 · 本次缓存命中 {hits} 次";
+                var (api, lines) = UsageStats.Snapshot();
+                return $"累计翻译 {lines} 句 · API 调用 {api} 次 · 本次缓存命中 {_cache.CacheHits} 次";
             }
         }
 

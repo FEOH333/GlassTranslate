@@ -135,13 +135,13 @@ namespace GlassTranslate.UI
                 _realtime[kv.Key] = vms;
 
                 // 同句多位置：最近距离贪心匹配，多余行建新泡，多余的泡移除
-                MatchOccurrences(kv.Value, vms, ref total, _realtime, current);
+                MatchOccurrences(kv.Value, vms, ref total, current);
             }
         }
 
         /// <summary>把当前帧中某句子的所有出现位置与现有气泡对齐。</summary>
         private void MatchOccurrences(List<ScreenText> lines, List<TooltipVm> vms,
-            ref int total, Dictionary<string, List<TooltipVm>> dict, List<ScreenText> frame)
+            ref int total, List<ScreenText> frame)
         {
             var remaining = vms.ToList();
             foreach (var vm in remaining) vm.Matched = false;

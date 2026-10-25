@@ -69,7 +69,8 @@ namespace GlassTranslate.Platform
             int stride = size * 4;
             var pixels = new byte[stride * size];
             rtb.CopyPixels(pixels, stride, 0);
-            var andMask = new byte[ stride / 4 * size / 4 ]; // 1bpp：32x32 位掩码全 0（使用 per-pixel alpha）
+            // AND 掩码 1bpp：每行按字节对齐（32px → 4 字节/行）
+            var andMask = new byte[((size + 7) / 8) * size];
 
             return CreateIconInstance(size, pixels, andMask);
         }

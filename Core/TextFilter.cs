@@ -104,8 +104,13 @@ namespace GlassTranslate.Core
             return len > 0 && sym * 100 > len * 35;
         }
 
-        /// <summary>缓存键：去多余空白 + 小写化。让 "Settings" 与 "SETTINGS" 共享一次翻译。</summary>
+        /// <summary>
+        /// 缓存键：去多余空白 + 小写化 + 去首尾标点。
+        /// OCR 对句尾标点常"闪烁"（有/无句号来回变），归一化后共享一次翻译。
+        /// </summary>
         public static string NormalizeKey(string text) =>
-            Regex.Replace(text.Trim(), @"\s+", " ").ToLowerInvariant();
+            Regex.Replace(
+                text.Trim().TrimEnd('.', ':', ',', ';', '!', '?', '。', '：', '，', '！', '？', '"', '\''),
+                @"\s+", " ").ToLowerInvariant();
     }
 }

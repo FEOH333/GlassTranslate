@@ -69,6 +69,7 @@ namespace GlassTranslate.UI
                     e.Handled = true;
                 }
             };
+            ContextMenuOpening += (s, e) => CancelRecording();   // 菜单打开时终止快捷键录制
             MenuClear.Click += (s, e) => _controller.ClearTranslations();
             MenuHideBall.Click += (s, e) => _controller.ShowBall(false);
             MenuExit.Click += (s, e) => _controller.ExitApp();
