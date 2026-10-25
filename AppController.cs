@@ -222,6 +222,9 @@ namespace GlassTranslate
 
         public void ClearCache() => _cache.Clear();
 
+        /// <summary>一键清除屏幕上全部译文气泡（悬浮球中键 / 右键菜单 / 托盘）。</summary>
+        public void ClearTranslations() => _overlay.ClearAll();
+
         public void ExitApp()
         {
             try
@@ -251,6 +254,8 @@ namespace GlassTranslate
             _miRealtime.Click += (s, e) => ToggleRealtime(_miRealtime.IsChecked);
             _miHotkey = new MenuItem { Header = "启用快捷键全屏翻译", IsCheckable = true };
             _miHotkey.Click += (s, e) => SetHotkeyMode(_miHotkey.IsChecked);
+            var clear = new MenuItem { Header = "清除当前译文" };
+            clear.Click += (s, e) => ClearTranslations();
             var exit = new MenuItem { Header = "退出" };
             exit.Click += (s, e) => ExitApp();
 
@@ -259,6 +264,7 @@ namespace GlassTranslate
             menu.Items.Add(_miApi);
             menu.Items.Add(_miRealtime);
             menu.Items.Add(_miHotkey);
+            menu.Items.Add(clear);
             menu.Items.Add(new Separator());
             menu.Items.Add(exit);
         }

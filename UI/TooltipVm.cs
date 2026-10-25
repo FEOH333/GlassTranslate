@@ -21,6 +21,8 @@ namespace GlassTranslate.UI
 
         public string Key { get; }
         public ScreenText Source { get; set; }
+        /// <summary>帧同步时的贪心匹配标记（OverlayController 用）。</summary>
+        public bool Matched;
         /// <summary>预估摆放矩形（该显示器的物理像素），供后续气泡避让。</summary>
         public (double X, double Y, double W, double H) Placed { get; set; }
 

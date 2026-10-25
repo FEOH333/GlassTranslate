@@ -61,6 +61,15 @@ namespace GlassTranslate.UI
             Ball.MouseMove += OnBallMove;
             Ball.MouseLeftButtonUp += OnBallUp;
             Ball.MouseRightButtonUp += (s, e) => { BallMenu.PlacementTarget = Ball; BallMenu.IsOpen = true; };
+            Ball.MouseDown += (s, e) =>
+            {
+                if (e.ChangedButton == MouseButton.Middle)
+                {
+                    _controller.ClearTranslations();
+                    e.Handled = true;
+                }
+            };
+            MenuClear.Click += (s, e) => _controller.ClearTranslations();
             MenuHideBall.Click += (s, e) => _controller.ShowBall(false);
             MenuExit.Click += (s, e) => _controller.ExitApp();
 

@@ -74,6 +74,7 @@
 
     <Window.ContextMenu>
         <ContextMenu x:Name="BallMenu">
+            <MenuItem x:Name="MenuClear" Header="清除当前译文"/>
             <MenuItem x:Name="MenuHideBall" Header="隐藏悬浮球（托盘仍可用）"/>
             <Separator/>
             <MenuItem x:Name="MenuExit" Header="退出"/>

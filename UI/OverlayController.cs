@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using GlassTranslate.Core;
 using GlassTranslate.Platform;
@@ -12,22 +14,22 @@ namespace GlassTranslate.UI
     /// 译文悬浮层控制器：管理每个显示器的 OverlayWindow 与气泡生命周期，
     /// 实现 ITranslationSink 接收调度器回调（全部转回 UI 线程）。
     ///
-    /// 摆位策略（“语句旁的空白处，不遮挡其他内容”）：
-    ///   下方 → 上方 → 右侧 → 最后兜底覆盖原文行本身；
-    ///   候选位置与同屏其他 OCR 行、已放置气泡求交，全部冲突才降级。
+    /// v1.3：同一句子多处出现时每个位置一个气泡（按 normKey 分组 + 最近位置贪心匹配，
+    /// 滚动时气泡跟随最近的同名行）；气泡尺寸用 FormattedText 实测（替代字符数粗估），
+    /// 摆位避让更准；中键点球 / 右键菜单可一键清除全部译文。
     /// </summary>
     internal sealed class OverlayController : ITranslationSink
     {
-        private const int MaxTooltips = 80;
+        private const int MaxTooltips = 120;
 
         private readonly TranslationCache _cache;
         private readonly Dispatcher _ui = Application.Current.Dispatcher;
-        private readonly Dictionary<string, TooltipVm> _realtime = new();
-        private readonly Dictionary<string, TooltipVm> _oneShot = new();
+        private readonly Dictionary<string, List<TooltipVm>> _realtime = new();
+        private readonly Dictionary<string, List<TooltipVm>> _oneShot = new();
         private readonly List<OverlayWindow?> _windows = new();
         private readonly List<(Win32.RECT Rect, uint Dpi)> _monitors = new();
+        private List<ScreenText> _lastFrame = new();
         private DateTime _lastErrorAt = DateTime.MinValue;
-        private DateTime _lastClearAt = DateTime.MinValue;
 
         public OverlayController(TranslationCache cache)
         {
@@ -57,28 +59,32 @@ namespace GlassTranslate.UI
         // ---------------- ITranslationSink ----------------
 
         public void OnRealtimeSync(List<ScreenText> current) =>
-            _ui.BeginInvoke(() => SyncRealtime(current));
+            _ui.BeginInvoke(() => { _lastFrame = current; SyncRealtime(current); });
 
         public void OnOneShotResult(List<ScreenText> lines) =>
             _ui.BeginInvoke(() =>
             {
+                _lastFrame = lines;
                 ClearDict(_oneShot);
                 foreach (var group in GroupByMonitor(lines))
-                    ShowGroup(group, _oneShot);
+                    ShowGroup(group.Lines, _oneShot);
             });
 
-        public void OnOneShotClear() => _ui.BeginInvoke(() =>
-        {
-            // 快速连按时避免闪烁抑制
-            _lastClearAt = DateTime.UtcNow;
-            ClearDict(_oneShot);
-        });
+        public void OnOneShotClear() => _ui.BeginInvoke(() => ClearDict(_oneShot));
 
         public void OnTranslationDelta(string normKey, string delta) =>
             _ui.BeginInvoke(() =>
             {
-                var vm = _realtime.GetValueOrDefault(normKey) ?? _oneShot.GetValueOrDefault(normKey);
-                vm?.AppendDelta(delta);
+                var list = _realtime.GetValueOrDefault(normKey);
+                list ??= _oneShot.GetValueOrDefault(normKey);
+                if (list == null) return;
+                foreach (var vm in list)
+                {
+                    bool firstChunk = vm.Text == "…";
+                    vm.AppendDelta(delta);
+                    // 首个字符到达后译文长度已知，按实测尺寸重摆一次
+                    if (firstChunk) Reposition(vm, vm.Source, _lastFrame);
+                }
             });
 
         public void OnTranslationDone(string normKey) { /* 缓存已写，气泡自然打完 */ }
@@ -86,8 +92,9 @@ namespace GlassTranslate.UI
         public void OnTranslationFailed(string normKey) =>
             _ui.BeginInvoke(() =>
             {
-                var vm = _realtime.GetValueOrDefault(normKey) ?? _oneShot.GetValueOrDefault(normKey);
-                vm?.SetFailed();
+                var list = _realtime.GetValueOrDefault(normKey);
+                list ??= _oneShot.GetValueOrDefault(normKey);
+                if (list != null) foreach (var vm in list) vm.SetFailed();
             });
 
         public void OnError(string message)
@@ -97,51 +104,88 @@ namespace GlassTranslate.UI
             Toast.Show(message);
         }
 
+        /// <summary>一键清除全部译文（悬浮球中键 / 右键菜单）。</summary>
+        public void ClearAll() => _ui.BeginInvoke(() =>
+        {
+            ClearDict(_oneShot);
+            ClearDict(_realtime);
+        });
+
         // ---------------- 实时同步 ----------------
 
         private void SyncRealtime(List<ScreenText> current)
         {
-            var keys = new HashSet<string>();
-            foreach (var l in current) keys.Add(TextFilter.NormalizeKey(l.Text));
+            var groups = current
+                .GroupBy(l => TextFilter.NormalizeKey(l.Text))
+                .ToDictionary(g => g.Key, g => g.ToList());
 
-            foreach (var gone in _realtime.Where(kv => !keys.Contains(kv.Key)).ToList())
-                RemoveVm(_realtime, gone.Key, gone.Value);
+            // 移除整组消失的句子
+            foreach (var gone in _realtime.Where(kv => !groups.ContainsKey(kv.Key)).ToList())
+                ClearGroup(_realtime, gone.Key);
 
-            var grouped = GroupByMonitor(current);
-            foreach (var group in grouped)
+            int total = TotalCount();
+            foreach (var kv in groups)
             {
-                foreach (var l in group.Lines)
-                {
-                    var key = TextFilter.NormalizeKey(l.Text);
-                    if (_oneShot.ContainsKey(key)) continue;
-                    if (_realtime.TryGetValue(key, out var vm))
-                    {
-                        if (Math.Abs(vm.Source.X - l.X) + Math.Abs(vm.Source.Y - l.Y) > 12)
-                            Reposition(vm, l, current);
-                        vm.Source = l;
-                    }
-                    else if (_realtime.Count < MaxTooltips)
-                    {
-                        var cached = _cache.Get(key);
-                        var nv = new TooltipVm(key, l, cached);
-                        _realtime[key] = nv;
-                        AddToWindow(nv, current);
-                    }
-                }
+                if (!_realtime.TryGetValue(kv.Key, out var vms)) vms = new();
+                _realtime[kv.Key] = vms;
+
+                // 同句多位置：最近距离贪心匹配，多余行建新泡，多余的泡移除
+                MatchOccurrences(kv.Value, vms, ref total, _realtime, current);
             }
         }
 
-        private void ShowGroup((int Index, List<ScreenText> Lines) group, Dictionary<string, TooltipVm> dict)
+        /// <summary>把当前帧中某句子的所有出现位置与现有气泡对齐。</summary>
+        private void MatchOccurrences(List<ScreenText> lines, List<TooltipVm> vms,
+            ref int total, Dictionary<string, List<TooltipVm>> dict, List<ScreenText> frame)
         {
-            foreach (var l in group.Lines)
+            var remaining = vms.ToList();
+            foreach (var vm in remaining) vm.Matched = false;
+            foreach (var line in lines)
             {
-                var key = TextFilter.NormalizeKey(l.Text);
-                if (dict.ContainsKey(key)) continue;
-                if (dict.Count >= MaxTooltips) break;
+                TooltipVm? best = null;
+                double bestDist = double.MaxValue;
+                foreach (var vm in remaining.Where(v => !v.Matched && v.Source.MonitorIndex == line.MonitorIndex))
+                {
+                    double d = Math.Abs(vm.Source.X - line.X) + Math.Abs(vm.Source.Y - line.Y);
+                    if (d < bestDist) { bestDist = d; best = vm; }
+                }
+                if (best != null && bestDist < 400)
+                {
+                    best.Matched = true;
+                    bool moved = Math.Abs(best.Source.X - line.X) + Math.Abs(best.Source.Y - line.Y) > 12;
+                    best.Source = line;
+                    if (moved) Reposition(best, line, frame);
+                }
+                else if (total < MaxTooltips)
+                {
+                    var nv = new TooltipVm(TextFilter.NormalizeKey(line.Text), line,
+                        _cache.Get(TextFilter.NormalizeKey(line.Text)));
+                    vms.Add(nv);
+                    total++;
+                    AddToWindow(nv, frame);
+                }
+            }
+            foreach (var unmatched in remaining.Where(v => !v.Matched).ToList())
+            {
+                vms.Remove(unmatched);
+                RemoveVm(unmatched);
+            }
+        }
+
+        private int TotalCount() =>
+            _realtime.Values.Sum(l => l.Count) + _oneShot.Values.Sum(l => l.Count);
+
+        private void ShowGroup(List<ScreenText> lines, Dictionary<string, List<TooltipVm>> dict)
+        {
+            foreach (var line in lines)
+            {
+                var key = TextFilter.NormalizeKey(line.Text);
+                if (!dict.TryGetValue(key, out var vms)) { vms = new(); dict[key] = vms; }
+                if (vms.Count >= 6 || TotalCount() >= MaxTooltips) continue;
                 var cached = _cache.Get(key);
-                var vm = new TooltipVm(key, l, cached);
-                dict[key] = vm;
-                AddToWindow(vm, group.Lines);
+                var vm = new TooltipVm(key, line, cached);
+                vms.Add(vm);
+                AddToWindow(vm, lines);
             }
         }
 
@@ -177,7 +221,7 @@ namespace GlassTranslate.UI
         {
             var w = GetWindow(vm.Source.MonitorIndex);
             var (px, py) = Place(vm, vm.Source, frameLines, w);
-            vm.X = w.ToDip(px) ;
+            vm.X = w.ToDip(px);
             vm.Y = w.ToDip(py);
             w.Add(vm);
         }
@@ -190,9 +234,8 @@ namespace GlassTranslate.UI
             vm.Y = w.ToDip(py);
         }
 
-        private void RemoveVm(Dictionary<string, TooltipVm> dict, string key, TooltipVm vm)
+        private void RemoveVm(TooltipVm vm)
         {
-            dict.Remove(key);
             vm.Dying = true;
             var t = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(240) };
             t.Tick += (s, e) =>
@@ -204,31 +247,42 @@ namespace GlassTranslate.UI
             t.Start();
         }
 
-        private void ClearDict(Dictionary<string, TooltipVm> dict)
+        private void ClearGroup(Dictionary<string, List<TooltipVm>> dict, string key)
         {
-            foreach (var kv in dict.ToList()) RemoveVm(dict, kv.Key, kv.Value);
+            if (!dict.TryGetValue(key, out var vms)) return;
+            foreach (var vm in vms) RemoveVm(vm);
+            dict.Remove(key);
         }
 
-        /// <summary>核心摆位：返回相对该窗口左上角的物理像素坐标。</summary>
+        private void ClearDict(Dictionary<string, List<TooltipVm>> dict)
+        {
+            foreach (var key in dict.Keys.ToList()) ClearGroup(dict, key);
+        }
+
+        // ---------------- 摆位算法 ----------------
+
+        /// <summary>
+        /// 摆位：下方 → 上方 → 右侧 → 兜底覆盖原文；
+        /// 候选位置与同屏其他 OCR 行、已放置气泡求交，全部冲突才降级。
+        /// </summary>
         private (int px, int py) Place(TooltipVm vm, ScreenText line, List<ScreenText> frameLines, OverlayWindow w)
         {
             var mon = w.PixelRect;
             var dip = w.Dpi / 96.0;
-            // 预估气泡尺寸（物理像素）
-            double estW = Math.Min(340, 52 + vm.TextLengthEstimate() * 13.0) * dip;
-            double estH = (30 + (estW > 336 * dip ? vm.TextLengthEstimate() * 13.0 / (326 * dip) * 20 : 0)) * dip;
+            var (estW, estH) = MeasureBubble(vm, dip);
 
             var blocked = new List<(double X, double Y, double W, double H)>();
             foreach (var l in frameLines)
             {
                 if (l.MonitorIndex != w.MonitorIndex) continue;
-                if (l.X == line.X && l.Y == line.Y && l.Text == line.Text) continue; // 自己那行不算
+                if (l.X == line.X && l.Y == line.Y && l.Text == line.Text) continue;
                 blocked.Add((l.X, l.Y, l.Width, l.Height));
             }
             foreach (var d in new[] { _realtime, _oneShot })
-                foreach (var other in d.Values)
-                    if (other != vm && other.Source.MonitorIndex == w.MonitorIndex)
-                        blocked.Add(other.Placed);
+                foreach (var list in d.Values)
+                    foreach (var other in list)
+                        if (other != vm && !other.Dying && other.Source.MonitorIndex == w.MonitorIndex)
+                            blocked.Add(other.Placed);
 
             double Gap = 6 * dip;
             var candidates = new (double X, double Y)[]
@@ -253,6 +307,41 @@ namespace GlassTranslate.UI
             return ((int)(line.X - mon.Left), (int)(line.Y - mon.Top));
         }
 
+        /// <summary>
+        /// 气泡尺寸：译文已开始流出时用 FormattedText 实测；
+        /// 还是占位符时按原文长度粗估（首个字符到达后会重摆一次）。
+        /// </summary>
+        private static (double pw, double ph) MeasureBubble(TooltipVm vm, double dip)
+        {
+            double wDip, hDip;
+            if (vm.Text is not "…" and { Length: > 0 })
+            {
+                var ft = new FormattedText(
+                    vm.Text,
+                    CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    new Typeface(new FontFamily("Segoe UI, Microsoft YaHei UI"),
+                        FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
+                    13.5, Brushes.White, 1.0);
+                ft.MaxTextWidth = 320;   // MaxWidth 340 - 左右 padding
+                ft.LineHeight = 20;
+                wDip = Math.Min(ft.Width, 320) + 22;
+                hDip = ft.Height + 14;
+            }
+            else
+            {
+                int cjk = 0, other = 0;
+                foreach (var c in vm.Source.Text)
+                {
+                    if (c >= 0x4e00 && c <= 0x9fff) cjk++; else other++;
+                }
+                double estChars = Math.Max(6, (cjk + other * 0.6) * 1.2);
+                wDip = Math.Min(340, 52 + estChars * 13.0);
+                hDip = 34 + (estChars > 22 ? 20 : 0);
+            }
+            return (wDip * dip, hDip * dip);
+        }
+
         private static bool IntersectsAny(double x, double y, double w, double h,
             List<(double X, double Y, double W, double H)> rects, double inflate)
         {
@@ -263,21 +352,6 @@ namespace GlassTranslate.UI
                     return true;
             }
             return false;
-        }
-    }
-
-    internal static class TooltipVmEstimateExt
-    {
-        /// <summary>粗略字数（中文按 1、其他按 0.55 个宽度计）。</summary>
-        public static double TextLengthEstimate(this TooltipVm vm)
-        {
-            int cjk = 0, other = 0;
-            foreach (var c in vm.Source.Text)
-            {
-                if (c >= 0x4e00 && c <= 0x9fff) cjk++; else other++;
-            }
-            // 译文一般不比原文长太多：用原文长度粗估
-            return Math.Max(6, cjk + other * 0.6) * 1.2;
         }
     }
 }
