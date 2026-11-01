@@ -1,24 +1,29 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using GlassTranslate.Config;
 using GlassTranslate.Core;
-using GlassTranslate.Core.Providers;
+using GlassTranslate.Core.LocalMt;
+using GlassTranslate.Core.OcrEngine;
 using GlassTranslate.Platform;
 using GlassTranslate.UI;
 
 namespace GlassTranslate
 {
     /// <summary>
-    /// 应用总装配：UI（悬浮球/悬浮层/设置/托盘）+ 核心（流水线/调度器/缓存/Provider）在此对接。
-    /// UI 只发命令、收状态；核心不依赖任何 WPF 类型。
+    /// 应用总装配（v2.0 纯本地版）：
+    /// 启动时装配 OCR 引擎（RapidOCR 优先/Windows 回退）与本地翻译引擎（Opus-MT），
+    /// UI（悬浮球/悬浮层/设置/托盘）与核心（流水线/调度器/句库）在此对接。
+    /// 全程零网络——解决方案内已无任何 HTTP 客户端代码。
     /// </summary>
     public sealed class AppController
     {
         private AppConfig _cfg = null!;
         private TranslationCache _cache = null!;
-        private OcrService? _ocr;
-        private TranslationDirector _director = null!;
+        private LocalMtEngine? _mt;
+        private IOcrEngine? _ocr;
+        private TranslationDirector? _director;
         private OverlayController _overlay = null!;
         private MessageWindow _msg = null!;
         private TrayIcon _tray = null!;
@@ -26,17 +31,25 @@ namespace GlassTranslate
         private BallWindow _ball = null!;
         private SettingsWindow? _settings;
 
-        private MenuItem _miShowBall = null!, _miApi = null!, _miRealtime = null!, _miHotkey = null!;
+        private MenuItem _miShowBall = null!, _miSet = null!, _miRealtime = null!, _miHotkey = null!;
 
         public AppConfig Config => _cfg;
         public int CacheCount => _cache.Count;
-        public string OcrLanguage => _ocr?.EngineLanguage ?? "";
+
+        public string MtStatus => _mt != null ? _mt.EngineName
+            : "未加载（models/mt 缺失，运行 tools/download-models.ps1）";
+        public string OcrStatus => _ocr?.EngineName ?? "无可用 OCR 引擎";
+        public string OcrEngineName => _director?.OcrEngineName ?? OcrStatus;
+        public bool FullyReady => _mt != null && _ocr != null;
 
         public void Initialize()
         {
             _cfg = AppConfig.Load();
             _cache = new TranslationCache(AppConfig.CachePath);
-            _ocr = OcrService.Create();
+
+            // ---- 引擎装配：本地翻译 + OCR（Rapid 优先，Windows 回退） ----
+            _mt = LocalMtEngine.Create();
+            _ocr = CreateOcrEngine(_cfg.OcrEngine);
 
             _msg = new MessageWindow();
             _tray = new TrayIcon(_msg.Handle, (uint)MessageWindow.TrayCallbackMsg);
@@ -58,17 +71,21 @@ namespace GlassTranslate
 
             _overlay = new OverlayController(_cache);
             _overlay.OnOverlayCreated += () => _ball?.ReassertTopmost();
-            _director = new TranslationDirector(_overlay, _cache, CreateProvider, _ocr!);
-            if (_ocr == null) Toast.Show("未检测到英文 OCR 引擎，翻译功能不可用。请到 Windows 设置 → 应用 → 可选功能 → 添加功能，安装 “英语(美国) 光学字符识别”。");
+            _overlay.AfterRealtimeSync += RefreshExclusions;   // 译文气泡区域也纳入"不识别"范围
+
+            if (_mt != null && _ocr != null)
+                _director = new TranslationDirector(_overlay, _cache, _mt, _ocr);
 
             _ball = new BallWindow(this);
-            if (_cfg.ShowBall) _ball.Show();
-
-            // 悬浮球/面板区域变化时把自身窗口上报为"不翻译"区域（防止翻译自己界面上的文字）
             _ball.LocationChanged += (s, e) => RefreshExclusions();
             _ball.SizeChanged += (s, e) => RefreshExclusions();
             _ball.IsVisibleChanged += (s, e) => RefreshExclusions();
-            RefreshExclusions();
+            if (_cfg.ShowBall) _ball.Show();
+
+            if (_mt == null)
+                Toast.Show("本地翻译模型未找到：请运行 tools/download-models.ps1 下载（约 110MB，仅一次）。");
+            if (_ocr == null)
+                Toast.Show("未检测到可用 OCR 引擎：RapidOCR 模型缺失且 Windows OCR 不可用。");
 
             if (_cfg.HotkeyModeEnabled)
             {
@@ -83,16 +100,13 @@ namespace GlassTranslate
             SyncUi();
         }
 
-        // ---------------- Provider ----------------
-
-        private ITranslationProvider CreateProvider()
+        private static IOcrEngine? CreateOcrEngine(string pref)
         {
-            if (string.IsNullOrWhiteSpace(_cfg.ApiKey))
-                throw new ProviderException("尚未配置 API Key：点击悬浮球 → “配置 API”。");
-            var preset = _cfg.Preset;
-            return preset.Protocol == "anthropic"
-                ? new AnthropicProvider(_cfg.EffectiveBaseUrl, _cfg.ApiKey, _cfg.EffectiveModel)
-                : new OpenAiProvider(_cfg.EffectiveBaseUrl, _cfg.ApiKey, _cfg.EffectiveModel, preset.NoThinking);
+            if (pref == "windows")
+                return WindowsOcrEngine.Create();
+            var rapid = RapidOcrEngine.Create();
+            if (rapid != null || pref == "rapid") return rapid;
+            return WindowsOcrEngine.Create();
         }
 
         // ---------------- 命令（悬浮球/托盘共用） ----------------
@@ -114,22 +128,6 @@ namespace GlassTranslate
             }
         }
 
-        /// <summary>把悬浮球/设置窗的物理矩形上报给流水线，这些区域内的文字不翻译。</summary>
-        private void RefreshExclusions()
-        {
-            var rects = new List<Win32.RECT>();
-            void Add(System.Windows.Window? w)
-            {
-                if (w == null || !w.IsVisible) return;
-                var h = WindowEffects.Hwnd(w);
-                if (h != IntPtr.Zero && Win32.GetWindowRect(h, out var r) && r.Width > 0)
-                    rects.Add(r);
-            }
-            Add(_ball);
-            Add(_settings);
-            _director.UpdatePipelineExclusions(rects);
-        }
-
         public void ToggleRealtime(bool on)
         {
             if (on)
@@ -139,7 +137,7 @@ namespace GlassTranslate
             else
             {
                 _cfg.RealtimeEnabled = false;
-                _director.StopRealtime();
+                _director?.StopRealtime();
             }
             SaveConfig();
             SyncUi();
@@ -147,23 +145,22 @@ namespace GlassTranslate
 
         private bool TryStartRealtime()
         {
+            if (_mt == null)
+            {
+                Toast.Show("本地翻译模型未加载：请运行 tools/download-models.ps1 下载模型后重启。");
+                _cfg.RealtimeEnabled = false;
+                return false;
+            }
             if (_ocr == null)
             {
-                Toast.Show("无可用 OCR 引擎：请在 Windows 设置 → 应用 → 可选功能 中安装 “英语(美国) 光学字符识别”。");
+                Toast.Show("无可用 OCR 引擎（RapidOCR 模型缺失且 Windows OCR 不可用）。");
                 _cfg.RealtimeEnabled = false;
                 return false;
             }
-            try { CreateProvider(); }
-            catch (Exception ex)
-            {
-                Toast.Show(ex.Message);
-                _cfg.RealtimeEnabled = false;
-                OpenSettings();
-                return false;
-            }
+            _director ??= new TranslationDirector(_overlay, _cache, _mt, _ocr);
             _cfg.RealtimeEnabled = true;
             _director.StartRealtime((int)Math.Clamp(_cfg.OcrIntervalMs, 800, 5000));
-            Toast.Show("实时全屏翻译已开启");
+            Toast.Show("实时全屏翻译已开启（本地离线）");
             return true;
         }
 
@@ -186,7 +183,7 @@ namespace GlassTranslate
             {
                 _hotkey.Unregister();
                 _cfg.HotkeyModeEnabled = false;
-                _director.ClearOneShot();   // 关闭时清掉可能还在屏幕上的一次性译文
+                _director?.ClearOneShot();   // 关闭时清掉可能还在屏幕上的一次性译文
             }
             SaveConfig();
             SyncUi();
@@ -212,6 +209,11 @@ namespace GlassTranslate
                 Toast.Show("快捷键翻译未启用：点击悬浮球 → “快捷键全屏翻译”。");
                 return;
             }
+            if (_director == null)
+            {
+                Toast.Show("引擎未就绪：请先下载模型（tools/download-models.ps1）。");
+                return;
+            }
             _director.ToggleOneShot();
         }
 
@@ -235,16 +237,39 @@ namespace GlassTranslate
 
         public void SaveConfig() => _cfg.Save();
 
+        /// <summary>引擎/间隔等配置变化后调用：实时模式热重启。</summary>
         public void OnConfigSaved()
         {
-            Toast.Show("配置已保存");
-            // 轮询间隔可能变化：实时模式重启一次
-            if (_cfg.RealtimeEnabled)
+            Toast.Show("设置已保存");
+            if (_director != null && _director.RealtimeRunning)
             {
                 _director.StopRealtime();
                 TryStartRealtime();
             }
+            else if (_cfg.RealtimeEnabled)
+            {
+                TryStartRealtime();
+            }
             SyncUi();
+        }
+
+        /// <summary>应用新的 OCR 引擎选择（设置窗口保存时调用）。</summary>
+        public void ApplyOcrEngine(string pref)
+        {
+            _cfg.OcrEngine = pref;
+            var next = CreateOcrEngine(pref);
+            if (next == null)
+            {
+                Toast.Show("该 OCR 引擎不可用，保持原引擎。");
+                return;
+            }
+            _ocr = next;
+            if (_mt != null)
+            {
+                _director?.Dispose();
+                _director = new TranslationDirector(_overlay, _cache, _mt, _ocr);
+                if (_cfg.RealtimeEnabled) TryStartRealtime();
+            }
         }
 
         public void ClearCache() => _cache.Clear();
@@ -254,8 +279,8 @@ namespace GlassTranslate
         {
             get
             {
-                var (api, lines) = UsageStats.Snapshot();
-                return $"累计翻译 {lines} 句 · API 调用 {api} 次 · 本次缓存命中 {_cache.CacheHits} 次";
+                var (calls, lines) = UsageStats.Snapshot();
+                return $"累计翻译 {lines} 句 · 本地推理 {calls} 批 · 本次缓存命中 {_cache.CacheHits} 次";
             }
         }
 
@@ -266,11 +291,12 @@ namespace GlassTranslate
         {
             try
             {
-                _cfg.RealtimeEnabled = _director.RealtimeRunning;
+                if (_director != null) _cfg.RealtimeEnabled = _director.RealtimeRunning;
                 SaveConfig();
                 _cache.Flush();
                 UsageStats.Flush();
-                _director.Dispose();
+                _director?.Dispose();
+                _mt?.Dispose();
                 _tray.Dispose();
                 _hotkey.Unregister();
                 _msg.Dispose();
@@ -286,8 +312,8 @@ namespace GlassTranslate
             var menu = _tray.Menu;
             _miShowBall = new MenuItem { Header = "显示悬浮球", IsCheckable = true };
             _miShowBall.Click += (s, e) => ShowBall(_miShowBall.IsChecked);
-            _miApi = new MenuItem { Header = "配置 API…" };
-            _miApi.Click += (s, e) => OpenSettings();
+            _miSet = new MenuItem { Header = "设置…" };
+            _miSet.Click += (s, e) => OpenSettings();
             _miRealtime = new MenuItem { Header = "启用实时全屏翻译", IsCheckable = true };
             _miRealtime.Click += (s, e) => ToggleRealtime(_miRealtime.IsChecked);
             _miHotkey = new MenuItem { Header = "启用快捷键全屏翻译", IsCheckable = true };
@@ -299,7 +325,7 @@ namespace GlassTranslate
 
             menu.Items.Add(_miShowBall);
             menu.Items.Add(new Separator());
-            menu.Items.Add(_miApi);
+            menu.Items.Add(_miSet);
             menu.Items.Add(_miRealtime);
             menu.Items.Add(_miHotkey);
             menu.Items.Add(clear);
@@ -319,6 +345,23 @@ namespace GlassTranslate
             var app = Application.Current;
             if (app?.Dispatcher.CheckAccess() == true) Apply();
             else app?.Dispatcher.BeginInvoke(Apply);
+        }
+
+        /// <summary>把自身窗口 + 译文气泡的物理矩形上报给流水线，这些区域内的文字不识别不翻译。</summary>
+        private void RefreshExclusions()
+        {
+            var rects = new List<Win32.RECT>();
+            void Add(Window? w)
+            {
+                if (w == null || !w.IsVisible) return;
+                var h = WindowEffects.Hwnd(w);
+                if (h != IntPtr.Zero && Win32.GetWindowRect(h, out var r) && r.Width > 0)
+                    rects.Add(r);
+            }
+            Add(_ball);
+            Add(_settings);
+            rects.AddRange(_overlay.CollectBubbleRects());
+            _director?.UpdatePipelineExclusions(rects);
         }
     }
 }

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using GlassTranslate.Core.Providers;
-using GlassTranslate.Platform;
+using GlassTranslate.Core.LocalMt;
+using GlassTranslate.Core.OcrEngine;
 
 namespace GlassTranslate.Core
 {
@@ -18,24 +18,20 @@ namespace GlassTranslate.Core
         /// <summary>快捷键模式：一次性扫描结果。</summary>
         void OnOneShotResult(List<ScreenText> lines);
         void OnOneShotClear();
-        /// <summary>某句译文的增量字符（打字机效果）。</summary>
+        /// <summary>某句译文的增量字符（本地引擎整句到达，仍经打字机队列逐字渲染）。</summary>
         void OnTranslationDelta(string normKey, string delta);
         /// <summary>某句翻译完成并已写缓存。</summary>
         void OnTranslationDone(string normKey);
-        /// <summary>某句翻译失败（模型未给出该行结果）。</summary>
+        /// <summary>某句翻译失败。</summary>
         void OnTranslationFailed(string normKey);
         void OnError(string message);
     }
 
     /// <summary>
-    /// 翻译调度器：连接屏幕流水线与翻译缓存/Provider。
-    ///
-    /// 成本与体验策略：
-    ///  - 缓存命中的句子零调用、瞬发显示；
-    ///  - 未命中的句子按 500ms 窗口聚合、最多 16 行/批 → 一条流式请求；
-    ///  - 流式 "N|译文" 增量直接打到对应气泡，形成逐字输出；
-    ///  - 只有“行完整结束”才写入缓存（半截流不污染缓存）；
-    ///  - 失败的批次重排一次（Attempts 上限 2），避免死循环烧钱。
+    /// 翻译调度器（v2.0 本地引擎版）：连接屏幕流水线、本地翻译引擎与句库缓存。
+    ///  - 缓存命中的句子零推理、瞬发显示；
+    ///  - 未命中的句子按 300ms 窗口聚合、最多 16 行/批 → 本地推理逐句回调；
+    ///  - 失败的批次重排一次，避免死循环。
     /// </summary>
     public sealed class TranslationDirector : IDisposable
     {
@@ -52,7 +48,7 @@ namespace GlassTranslate.Core
 
         private readonly ITranslationSink _sink;
         private readonly TranslationCache _cache;
-        private readonly Func<ITranslationProvider> _providerFactory;
+        private readonly LocalMtEngine _mt;
         private readonly ScreenPipeline _pipeline;
         private readonly SemaphoreSlim _inflight = new(1, 1);
         private readonly object _gate = new();
@@ -65,22 +61,16 @@ namespace GlassTranslate.Core
 
         public bool RealtimeRunning => _realtimeRunning;
         public bool OneShotActive { get; private set; }
-        public string OcrLanguage => _ocrLang;
-        private readonly string _ocrLang;
-
-        /// <summary>更新"不翻译"窗口区域（透传给屏幕流水线）。</summary>
-        internal void UpdatePipelineExclusions(IEnumerable<Win32.RECT> rects) =>
-            _pipeline.UpdateExclusions(rects);
+        public string OcrEngineName => _pipeline.OcrEngineName;
 
         public event Action? OneShotStateChanged;
 
         public TranslationDirector(ITranslationSink sink, TranslationCache cache,
-            Func<ITranslationProvider> providerFactory, OcrService ocr)
+            LocalMtEngine mt, IOcrEngine ocr)
         {
             _sink = sink;
             _cache = cache;
-            _providerFactory = providerFactory;
-            _ocrLang = ocr.EngineLanguage;
+            _mt = mt;
             _pipeline = new ScreenPipeline(ocr);
             _pipeline.LinesDetected += OnLinesDetected;
         }
@@ -138,7 +128,7 @@ namespace GlassTranslate.Core
 
         // ---------------- 快捷键一次性模式 ----------------
 
-        public async void ToggleOneShot()
+        public void ToggleOneShot()
         {
             if (OneShotActive)
             {
@@ -149,7 +139,7 @@ namespace GlassTranslate.Core
             OneShotStateChanged?.Invoke();
             try
             {
-                var lines = await _pipeline.CaptureOnceAsync();
+                var lines = _pipeline.CaptureOnceAsync().GetAwaiter().GetResult();
                 if (!OneShotActive) return; // 期间被清除
                 var dedup = new Dictionary<string, ScreenText>();
                 foreach (var l in lines)
@@ -193,7 +183,7 @@ namespace GlassTranslate.Core
             _sink.OnOneShotClear();
         }
 
-        // ---------------- 批处理与流式分发 ----------------
+        // ---------------- 批处理与本地推理分发 ----------------
 
         private async Task FlushLoopAsync()
         {
@@ -216,27 +206,21 @@ namespace GlassTranslate.Core
                     }
                     if (batch.Count == 0) break;
 
-                    ITranslationProvider provider;
-                    try { provider = _providerFactory(); }
-                    catch (Exception ex) { _sink.OnError(ex.Message); return; }
-
+                    UsageStats.AddApiCall();
                     var completed = new HashSet<string>();
                     try
                     {
                         var sources = batch.Select(b => b.Source).ToList();
-                        await provider.StreamTranslateAsync(sources, (idx, delta, lineComplete, finalText) =>
+                        await _mt.TranslateBatchAsync(sources, (idx, text) =>
                         {
-                            if (idx < 1 || idx > batch.Count) return;
-                            var target = batch[idx - 1];
-                            if (!string.IsNullOrEmpty(delta))
-                                _sink.OnTranslationDelta(target.Key, delta);
-                            if (lineComplete && !string.IsNullOrEmpty(finalText))
-                            {
-                                _cache.Put(target.Key, finalText);
-                                completed.Add(target.Key);
-                                UsageStats.AddLine();
-                                _sink.OnTranslationDone(target.Key);
-                            }
+                            if (idx < 0 || idx >= batch.Count) return;
+                            var target = batch[idx];
+                            if (string.IsNullOrEmpty(text)) return;
+                            _sink.OnTranslationDelta(target.Key, text);
+                            _cache.Put(target.Key, text);
+                            completed.Add(target.Key);
+                            UsageStats.AddLine();
+                            _sink.OnTranslationDone(target.Key);
                         }, _shutdown.Token);
                         foreach (var b in batch)
                             if (!completed.Contains(b.Key))
@@ -245,8 +229,7 @@ namespace GlassTranslate.Core
                     catch (OperationCanceledException) { return; }
                     catch (Exception ex)
                     {
-                        _sink.OnError(ProviderException.Describe(ex));
-                        // 失败重排一次，避免烧钱死循环
+                        _sink.OnError("本地翻译失败：" + ex.Message);
                         lock (_gate)
                         {
                             foreach (var b in batch)
@@ -266,6 +249,10 @@ namespace GlassTranslate.Core
             }
             finally { _inflight.Release(); }
         }
+
+        /// <summary>更新"不翻译"窗口区域（透传给屏幕流水线；气泡矩形也走这里）。</summary>
+        internal void UpdatePipelineExclusions(IEnumerable<Platform.Win32.RECT> rects) =>
+            _pipeline.UpdateExclusions(rects);
 
         private void RemovePending(Predicate<PendingLine> match)
         {

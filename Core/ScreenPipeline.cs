@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using GlassTranslate.Core.OcrEngine;
 using GlassTranslate.Platform;
 
 namespace GlassTranslate.Core
@@ -34,7 +35,7 @@ namespace GlassTranslate.Core
             internal byte[]? Buffer;            // 全分辨率 OCR 帧（复用）
             internal byte[][]? CellHashes;      // 4×4 分格哈希
             internal bool FullScanNext = true;  // 首扫/大变化时整帧识别
-            internal OcrService? Peer;
+            internal IOcrEngine? Peer;
         }
 
         private const int ProbeBaseMs = 150;      // 运动探针基础间隔
@@ -42,7 +43,7 @@ namespace GlassTranslate.Core
         private const int ScanMinGapMs = 320;     // 连续变化（滚动/视频）下的最小扫描间隔
         private const int Cols = 4, Rows = 4;
 
-        private readonly OcrService _ocr;
+        private readonly IOcrEngine _ocr;
         private readonly List<MonitorCtx> _monitors = new();
         private readonly List<Win32.RECT> _exclusions = new();
         private readonly object _gate = new();
@@ -52,13 +53,16 @@ namespace GlassTranslate.Core
         private DateTime _lastScanAt = DateTime.MinValue;
         private volatile bool _pendingScan;
 
+        /// <summary>当前 OCR 引擎名（供展示）。</summary>
+        public string OcrEngineName => _ocr.EngineName;
+
         /// <summary>最近一次扫描是否检测到画面变化。</summary>
         public bool LastScanChanged { get; private set; }
 
         /// <summary>每次扫描完成触发（后台线程）。</summary>
         public event Action<List<ScreenText>>? LinesDetected;
 
-        public ScreenPipeline(OcrService ocr)
+        public ScreenPipeline(IOcrEngine ocr)
         {
             _ocr = ocr;
             RefreshMonitors();
@@ -97,8 +101,7 @@ namespace GlassTranslate.Core
             lock (_gate)
             {
                 _exclusions.Clear();
-                _exclusions.AddRange(rects);
-                foreach (var m in _monitors) { m.LastTinyHash = null; m.FullScanNext = true; }
+                _exclusions.AddRange(rects); // 注意：不重置哈希——排除区（含气泡）频繁变化，逐行后置过滤即可
             }
         }
 
@@ -226,7 +229,7 @@ namespace GlassTranslate.Core
         {
             var r = mon.Rect;
             if (r.Width <= 0 || r.Height <= 0) return (new List<ScreenText>(), false);
-            mon.Peer ??= _ocr.CreatePeer() ?? _ocr;
+            mon.Peer ??= _ocr.CreatePeer();
 
             var px = ScreenCapture.CaptureSmart(r.Left, r.Top, r.Width, r.Height,
                 mon.Peer.MaxDimension, out int sw, out int sh, out double scale, mon.Buffer);

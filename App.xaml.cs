@@ -18,7 +18,7 @@ namespace GlassTranslate
 
             if (e.Args.Length > 0 && e.Args[0].Equals("--selftest", StringComparison.OrdinalIgnoreCase))
             {
-                SelfTest.Run(e.Args.Length > 1 && e.Args[1] == "--api");
+                SelfTest.Run();
                 Shutdown();
                 return;
             }

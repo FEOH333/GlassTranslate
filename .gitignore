@@ -11,3 +11,5 @@ _*.png
 .vs/
 GlassTranslate-v*.zip
 .release-notes.md
+models/
+.zcode/

@@ -201,8 +201,8 @@
                             </Button>
                         </Grid>
 
-                        <Button x:Name="BtnApi" Grid.Row="1" Style="{StaticResource PillButton}"
-                                Content="⚙  配置 API"/>
+                    <Button x:Name="BtnApi" Grid.Row="1" Style="{StaticResource PillButton}"
+                            Content="⚙  引擎与设置"/>
 
                         <ToggleButton x:Name="TgRealtime" Grid.Row="2" Margin="0,9,0,0"
                                       Style="{StaticResource GlassToggle}"

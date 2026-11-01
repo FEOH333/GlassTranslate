@@ -60,7 +60,12 @@ namespace GlassTranslate.UI
         // ---------------- ITranslationSink ----------------
 
         public void OnRealtimeSync(List<ScreenText> current) =>
-            _ui.BeginInvoke(() => { _lastFrame = current; SyncRealtime(current); });
+            _ui.BeginInvoke(() =>
+            {
+                _lastFrame = current;
+                SyncRealtime(current);
+                AfterRealtimeSync?.Invoke();
+            });
 
         public void OnOneShotResult(List<ScreenText> lines) =>
             _ui.BeginInvoke(() =>
@@ -229,6 +234,32 @@ namespace GlassTranslate.UI
 
         /// <summary>新悬浮层盖到悬浮球之上时，让悬浮球重新置顶（AppController 订阅）。</summary>
         public event Action? OnOverlayCreated;
+
+        /// <summary>每次实时同步完成后触发（UI 线程）——AppController 借此把气泡矩形上报为不识别区。</summary>
+        public event Action? AfterRealtimeSync;
+
+        /// <summary>收集当前全部译文气泡的屏幕矩形（物理像素，外扩 6px），供 OCR 排除。</summary>
+        public List<Win32.RECT> CollectBubbleRects()
+        {
+            var list = new List<Win32.RECT>();
+            foreach (var dict in new[] { _realtime, _oneShot })
+                foreach (var vms in dict.Values)
+                    foreach (var vm in vms)
+                    {
+                        if (vm.Dying || !vm.PlacedOk) continue;
+                        var m = _monitors.Count > 0
+                            ? _monitors[Math.Clamp(vm.Source.MonitorIndex, 0, _monitors.Count - 1)].Rect
+                            : default;
+                        list.Add(new Win32.RECT
+                        {
+                            Left = m.Left + (int)vm.Placed.X - 6,
+                            Top = m.Top + (int)vm.Placed.Y - 6,
+                            Right = m.Left + (int)(vm.Placed.X + vm.Placed.W) + 6,
+                            Bottom = m.Top + (int)(vm.Placed.Y + vm.Placed.H) + 6
+                        });
+                    }
+            return list;
+        }
 
         private void AddToWindow(TooltipVm vm, List<ScreenText> frameLines)
         {

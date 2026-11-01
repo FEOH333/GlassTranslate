@@ -7,68 +7,51 @@ using Windows.Globalization;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 
-namespace GlassTranslate.Core
+namespace GlassTranslate.Core.OcrEngine
 {
-    public sealed class OcrLineResult
+    /// <summary>Windows 内置 OCR（免费、快）；作为 RapidOCR 不可用时的回退引擎。</summary>
+    public sealed class WindowsOcrEngine : IOcrEngine
     {
-        public string Text = "";
-        public double X, Y, Width, Height;
-    }
+        private readonly Windows.Media.Ocr.OcrEngine _engine;
+        public string EngineName => $"Windows OCR ({_lang})";
+        private readonly string _lang;
 
-    /// <summary>
-    /// Windows 内置 OCR（免费、快、英文精度好）。优先 en-US 引擎，逐级回退。
-    /// </summary>
-    public sealed class OcrService
-    {
-        private readonly OcrEngine _engine;
-        public string EngineLanguage { get; }
-
-        private OcrService(OcrEngine engine, string lang)
+        private WindowsOcrEngine(Windows.Media.Ocr.OcrEngine engine, string lang)
         {
             _engine = engine;
-            EngineLanguage = lang;
+            _lang = lang;
         }
 
-        public int MaxDimension => (int)OcrEngine.MaxImageDimension;
+        public int MaxDimension => (int)Windows.Media.Ocr.OcrEngine.MaxImageDimension;
 
-        public static OcrService? Create()
+        public static WindowsOcrEngine? Create()
         {
             try
             {
                 foreach (var tag in new[] { "en-US", "en-GB", "en" })
                 {
                     var lang = new Language(tag);
-                    if (OcrEngine.IsLanguageSupported(lang))
+                    if (Windows.Media.Ocr.OcrEngine.IsLanguageSupported(lang))
                     {
-                        var e = OcrEngine.TryCreateFromLanguage(lang);
-                        if (e != null) return new OcrService(e, tag);
+                        var e = Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(lang);
+                        if (e != null) return new WindowsOcrEngine(e, tag);
                     }
                 }
-                var profile = OcrEngine.TryCreateFromUserProfileLanguages();
-                if (profile != null) return new OcrService(profile, "user-profile");
-                var any = OcrEngine.AvailableRecognizerLanguages.FirstOrDefault();
+                var profile = Windows.Media.Ocr.OcrEngine.TryCreateFromUserProfileLanguages();
+                if (profile != null) return new WindowsOcrEngine(profile, "user-profile");
+                var any = Windows.Media.Ocr.OcrEngine.AvailableRecognizerLanguages.FirstOrDefault();
                 if (any != null)
                 {
-                    var e = OcrEngine.TryCreateFromLanguage(any);
-                    if (e != null) return new OcrService(e, any.LanguageTag);
+                    var e = Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(any);
+                    if (e != null) return new WindowsOcrEngine(e, any.LanguageTag);
                 }
                 return null;
             }
             catch { return null; }
         }
 
-        /// <summary>用同一语言再建一个引擎实例（多显示器并行扫描时每屏一个，WinRT 引擎不保证跨线程并发安全）。</summary>
-        public OcrService? CreatePeer()
-        {
-            try
-            {
-                var e = OcrEngine.TryCreateFromLanguage(new Language(EngineLanguage));
-                return e == null ? null : new OcrService(e, EngineLanguage);
-            }
-            catch { return null; }
-        }
+        public IOcrEngine CreatePeer() => this; // WinRT OCR 引擎本身可并发（文档保证）
 
-        /// <summary>识别一帧 BGRA 位图，返回每行文本与包围盒（位图像素坐标）。</summary>
         public async Task<List<OcrLineResult>> RecognizeAsync(byte[] bgra, int w, int h)
         {
             var lines = new List<OcrLineResult>();

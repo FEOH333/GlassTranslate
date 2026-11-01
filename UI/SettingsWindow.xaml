@@ -3,87 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="False"
-        Width="480" SizeToContent="Height" ResizeMode="NoResize"
+        Width="440" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI, Microsoft YaHei UI">
-
-    <Window.Resources>
-        <!-- 深色下拉框 -->
-        <Style x:Key="ProvCombo" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Height" Value="34"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton x:Name="tb" Focusable="False" ClickMode="Press"
-                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-                                <ToggleButton.Template>
-                                    <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="bd" CornerRadius="9" Background="#E80E1219"
-                                                BorderBrush="#33FFFFFF" BorderThickness="1">
-                                            <Path Data="M 0 0 L 4 4 L 8 0" Stroke="#FFB8C0CC" StrokeThickness="1.6"
-                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                  Margin="0,0,12,0"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="bd" Property="BorderBrush" Value="#557DD3FC"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </ToggleButton.Template>
-                            </ToggleButton>
-                            <ContentPresenter x:Name="cp" Content="{TemplateBinding SelectionBoxItem}"
-                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                              Margin="12,0,28,0" VerticalAlignment="Center"
-                                              TextBlock.Foreground="White" IsHitTestVisible="False"/>
-                            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
-                                   AllowsTransparency="True" PopupAnimation="Fade" Margin="0,4,0,0">
-                                <Border CornerRadius="10" Background="#F5141A24"
-                                        BorderBrush="#3DFFFFFF" BorderThickness="1" Margin="0,3,0,3"
-                                        MinWidth="{TemplateBinding ActualWidth}">
-                                    <Border.Effect>
-                                        <DropShadowEffect Color="#FF000000" BlurRadius="14" ShadowDepth="2" Opacity="0.45"/>
-                                    </Border.Effect>
-                                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
-                                        <StackPanel IsItemsHost="True"/>
-                                    </ScrollViewer>
-                                </Border>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Setter Property="ItemContainerStyle">
-                <Setter.Value>
-                    <Style TargetType="ComboBoxItem">
-                        <Setter Property="Foreground" Value="White"/>
-                        <Setter Property="FontSize" Value="13"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ComboBoxItem">
-                                    <Border x:Name="bd" CornerRadius="7" Margin="5,2" Padding="10,7"
-                                            Background="Transparent">
-                                        <ContentPresenter/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bd" Property="Background" Value="#2B7DD3FC"/>
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="bd" Property="Background" Value="#3D7DD3FC"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
 
     <Border CornerRadius="16" Margin="12" BorderThickness="1">
         <Border.Background>
@@ -111,12 +33,11 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- 标题栏（可拖动） -->
-            <Grid Grid.Row="0" x:Name="Header" Background="Transparent" Margin="0,0,0,12">
-                <TextBlock Text="⚙  API 与翻译设置" FontSize="15" FontWeight="SemiBold"
+            <Grid Grid.Row="0" x:Name="Header" Background="Transparent" Margin="0,0,0,4">
+                <TextBlock Text="⚙  设置 · 本地引擎（全程离线）" FontSize="15" FontWeight="SemiBold"
                            Foreground="{StaticResource TextMain}"/>
                 <Button x:Name="BtnClose" Content="✕" Width="28" Height="28"
                         HorizontalAlignment="Right" FontSize="12" Cursor="Hand">
@@ -135,87 +56,72 @@
                 </Button>
             </Grid>
 
-            <!-- 服务商 -->
-            <StackPanel Grid.Row="1" Margin="0,0,0,10">
-                <TextBlock Text="服务商" FontSize="12" Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
-                <ComboBox x:Name="ProviderBox" Style="{StaticResource ProvCombo}"/>
-                <TextBlock x:Name="ProtoInfo" Text="协议：OpenAI 兼容" FontSize="11.5" Margin="2,7,0,0"
-                           Foreground="{StaticResource TextSubtle}"/>
+            <!-- 引擎状态 -->
+            <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                <TextBlock Text="隐私说明：本软件不含任何联网代码，识别与翻译全部在本机完成。"
+                           FontSize="11.5" Foreground="{StaticResource TextSubtle}" Margin="0,0,0,8"
+                           TextWrapping="Wrap"/>
+                <TextBlock Text="翻译引擎" FontSize="12" Foreground="{StaticResource TextSubtle}" Margin="0,0,0,5"/>
+                <Border CornerRadius="9" Background="#1AFFFFFF" BorderBrush="#2EFFFFFF"
+                        BorderThickness="1" Padding="12,8">
+                    <TextBlock x:Name="MtInfo" Text="…" FontSize="13" Foreground="#FFD7E3F4"/>
+                </Border>
+                <TextBlock Text="OCR 引擎" FontSize="12" Foreground="{StaticResource TextSubtle}"
+                           Margin="0,10,0,5"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" CornerRadius="9" Background="#1AFFFFFF"
+                            BorderBrush="#2EFFFFFF" BorderThickness="1" Padding="12,8">
+                        <TextBlock x:Name="OcrInfo" Text="…" FontSize="13" Foreground="#FFD7E3F4"/>
+                    </Border>
+                    <ComboBox x:Name="EngineBox" Grid.Column="2" Width="120" Height="36"
+                              FontSize="12.5" SelectedIndex="0">
+                        <ComboBoxItem Content="自动"/>
+                        <ComboBoxItem Content="RapidOCR"/>
+                        <ComboBoxItem Content="Windows"/>
+                    </ComboBox>
+                </Grid>
             </StackPanel>
 
-            <!-- API Key -->
-            <StackPanel Grid.Row="2" Margin="0,0,0,10">
-                <TextBlock Text="API Key" FontSize="12" Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
+            <!-- 轮询间隔 -->
+            <StackPanel Grid.Row="2" Margin="0,14,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <PasswordBox x:Name="KeyBox" Grid.Column="0" Style="{StaticResource DarkPasswordBox}"/>
-                    <TextBox x:Name="KeyPlain" Grid.Column="0" Style="{StaticResource DarkTextBox}"
-                             Visibility="Collapsed" IsReadOnly="False"/>
-                    <Button x:Name="BtnEye" Grid.Column="1" Content="👁" Margin="8,0,0,0" Width="36"
-                            FontSize="13" Cursor="Hand" ToolTip="显示/隐藏">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="bd" CornerRadius="9" Background="#1FFFFFFF" BorderBrush="#33FFFFFF"
-                                        BorderThickness="1">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="bd" Property="Background" Value="#33FFFFFF"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
+                    <TextBlock Text="扫描间隔（画面静止时自动放缓）" FontSize="12"
+                               Foreground="{StaticResource TextSubtle}"/>
+                    <TextBlock x:Name="IntervalText" Grid.Column="1" FontSize="12"
+                               Foreground="#FFD7E3F4" FontFamily="Consolas"/>
                 </Grid>
+                <Slider x:Name="IntervalSlider" Minimum="800" Maximum="3000" Interval="100"
+                        VerticalAlignment="Center" Margin="0,6,0,0"/>
             </StackPanel>
 
-            <!-- Base URL -->
-            <StackPanel Grid.Row="3" Margin="0,0,0,10">
-                <TextBlock Text="API 地址（已填官方默认，可改为中转/代理）" FontSize="12"
-                           Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
-                <TextBox x:Name="BaseUrlBox" Style="{StaticResource DarkTextBox}"/>
-            </StackPanel>
-
-            <!-- 模型 -->
-            <StackPanel Grid.Row="4" Margin="0,0,0,12">
-                <TextBlock Text="模型（可手动输入任意模型名）" FontSize="12"
-                           Foreground="{StaticResource TextSubtle}" Margin="0,0,0,6"/>
-                <ComboBox x:Name="ModelBox" Style="{StaticResource ProvCombo}" IsEditable="True"/>
-            </StackPanel>
-
-            <!-- 测试连接 -->
-            <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,10">
-                <Button x:Name="BtnTest" Content="测试连接" Style="{StaticResource PillButton}" Width="110"/>
-                <TextBlock x:Name="TestResult" VerticalAlignment="Center" Margin="12,0,0,0"
-                           FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TextSubtle}"
-                           Width="300" Text=""/>
-            </StackPanel>
-
-            <!-- 缓存 & OCR -->
-            <Grid Grid.Row="6" Margin="0,0,0,12">
+            <!-- 缓存 & 用量 -->
+            <Grid Grid.Row="3" Margin="0,14,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock x:Name="CacheInfo" Text="本地缓存：0 条" FontSize="12"
+                    <TextBlock x:Name="CacheInfo" Text="本地句库：0 条" FontSize="12"
                                Foreground="{StaticResource TextSubtle}"/>
-                    <TextBlock x:Name="UsageInfo" Text="累计翻译 0 句" FontSize="12"
-                               Foreground="{StaticResource TextSubtle}" Margin="0,3,0,0"/>
-                    <TextBlock x:Name="OcrInfo" Text="OCR 引擎：…" FontSize="12"
-                               Foreground="{StaticResource TextSubtle}" Margin="0,3,0,0"/>
+                    <TextBlock x:Name="UsageInfo" Text="" FontSize="12"
+                               Foreground="{StaticResource TextSubtle}" Margin="0,3,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
-                <Button x:Name="BtnClearCache" Grid.Column="1" Content="清空缓存"
+                <Button x:Name="BtnClearCache" Grid.Column="1" Content="清空句库"
                         Style="{StaticResource PillButton}" VerticalAlignment="Center"/>
             </Grid>
 
             <!-- 保存 -->
-            <Button Grid.Row="7" x:Name="BtnSave" Content="保 存"
-                    Style="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch"/>
+            <Button Grid.Row="4" x:Name="BtnSave" Content="保 存"
+                    Style="{StaticResource PrimaryButton}" HorizontalAlignment="Stretch" Margin="0,16,0,0"/>
         </Grid>
     </Border>
 </Window>
