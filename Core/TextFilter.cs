@@ -36,6 +36,9 @@ namespace GlassTranslate.Core
         [GeneratedRegex(@"[^A-Za-z]+")]
         private static partial Regex NonLetterRegex();
 
+        [GeneratedRegex(@"[àáâãäèéêëìíîïòóôõöùúûüçßñåøœæýÿÀÁÂÃÄÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÇÑÅØŒÆÝ]")]
+        private static partial Regex AccentedLatinRegex();
+
         [GeneratedRegex(@"[A-Za-z_]\w*\(")]
         private static partial Regex FuncCallRegex();
 
@@ -57,6 +60,7 @@ namespace GlassTranslate.Core
             if (t.Length < 3 || t.Length > 480) return false;
             if (CjkRegex().IsMatch(t)) return false;                    // 已含中文（含我们自己的译文气泡）
             if (LatinRegex().Matches(t).Count < 3) return false;
+            if (AccentedLatinRegex().IsMatch(t)) return false;          // 带变音符的拉丁文（法/德/西等）——本工具只有 en→zh 模型，翻不了
             if (OnlySymbolsRegex().IsMatch(t)) return false;
             if (UrlRegex().IsMatch(t) || WindowsPathRegex().IsMatch(t) || EmailRegex().IsMatch(t)) return false;
             if (LooksLikeCode(t)) return false;

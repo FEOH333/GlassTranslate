@@ -174,6 +174,25 @@ namespace GlassTranslate.UI
                 }
                 else if (total < MaxTooltips)
                 {
+                    // 双保险：不同键但位置高度重叠且文本相似的已有气泡 → 视为同一句（OCR 闪烁变体），不再建泡
+                    bool dup = false;
+                    foreach (var otherList in _realtime.Values)
+                    {
+                        foreach (var vm2 in otherList)
+                        {
+                            if (vm2.Dying || vm2.Source.MonitorIndex != line.MonitorIndex) continue;
+                            if (FuzzyText.RectIoU(vm2.Source.X, vm2.Source.Y, vm2.Source.Width, vm2.Source.Height,
+                                    line.X, line.Y, line.Width, line.Height) >= 0.55 &&
+                                FuzzyText.Similarity(vm2.Source.Text, line.Text) >= 0.8)
+                            {
+                                dup = true;
+                                break;
+                            }
+                        }
+                        if (dup) break;
+                    }
+                    if (dup) continue;
+
                     var nv = new TooltipVm(TextFilter.NormalizeKey(line.Text), line,
                         _cache.Get(TextFilter.NormalizeKey(line.Text)));
                     AddToWindow(nv, frame);
@@ -360,6 +379,7 @@ namespace GlassTranslate.UI
         /// <summary>
         /// 气泡尺寸：译文已开始流出时用 FormattedText 实测；
         /// 还是占位符时按原文长度粗估（首个字符到达后会重摆一次）。
+        /// 常量与 DataTemplate 对齐：MaxWidth 344、padding 11/7。
         /// </summary>
         private static (double pw, double ph) MeasureBubble(TooltipVm vm, double dip)
         {
@@ -373,10 +393,10 @@ namespace GlassTranslate.UI
                     new Typeface(new FontFamily("Segoe UI, Microsoft YaHei UI"),
                         FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
                     13.5, Brushes.White, 1.0);
-                ft.MaxTextWidth = 320;   // MaxWidth 340 - 左右 padding
+                ft.MaxTextWidth = 322;   // MaxWidth 344 - 左右 padding
                 ft.LineHeight = 20;
-                wDip = Math.Min(ft.Width, 320) + 22;
-                hDip = ft.Height + 14;
+                wDip = Math.Min(ft.Width, 322) + 24;
+                hDip = ft.Height + 16;
             }
             else
             {
@@ -386,8 +406,8 @@ namespace GlassTranslate.UI
                     if (c >= 0x4e00 && c <= 0x9fff) cjk++; else other++;
                 }
                 double estChars = Math.Max(6, (cjk + other * 0.6) * 1.2);
-                wDip = Math.Min(340, 52 + estChars * 13.0);
-                hDip = 34 + (estChars > 22 ? 20 : 0);
+                wDip = Math.Min(344, 54 + estChars * 13.0);
+                hDip = 36 + (estChars > 22 ? 20 : 0);
             }
             return (wDip * dip, hDip * dip);
         }

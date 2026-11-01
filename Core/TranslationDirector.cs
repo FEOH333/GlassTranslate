@@ -59,6 +59,15 @@ namespace GlassTranslate.Core
         private Timer? _flushTimer;
         private bool _realtimeRunning;
 
+        /// <summary>上一帧的规范化行快照（防 OCR 闪烁变体重复翻译）。</summary>
+        private sealed class FrameLine
+        {
+            public string Key = "";
+            public string Text = "";
+            public int X, Y, W, H, Monitor;
+        }
+        private List<FrameLine> _lastFrameLines = new();
+
         public bool RealtimeRunning => _realtimeRunning;
         public bool OneShotActive { get; private set; }
         public string OcrEngineName => _pipeline.OcrEngineName;
@@ -103,6 +112,7 @@ namespace GlassTranslate.Core
         private void OnLinesDetected(List<ScreenText> lines)
         {
             if (!_realtimeRunning) return;
+            lines = Canonicalize(lines);
             lock (_gate)
             {
                 var seen = new HashSet<string>();
@@ -124,6 +134,55 @@ namespace GlassTranslate.Core
                 RemovePending(p => p.FromRealtime && !_realtimeKeys.Contains(p.Key) && !_oneShotKeys.Contains(p.Key));
             }
             _sink.OnRealtimeSync(lines);
+        }
+
+        /// <summary>
+        /// 归并 OCR 闪烁变体：OCR 对同一行常产出微小差异文本（多/少空格、l↔I、句尾标点），
+        /// 精确键不同 → 会重复翻译并出现并排双泡。对"新面孔"行，若与上一帧某行
+        /// 位置重叠(IoU≥0.5)且文本相似(≥0.72)，则映射回既有键——零额外翻译成本，
+        /// 气泡也保持单一只随位置移动。
+        /// </summary>
+        private List<ScreenText> Canonicalize(List<ScreenText> lines)
+        {
+            var hasPrev = _lastFrameLines.Count > 0;
+            var result = new List<ScreenText>(lines.Count);
+            var newFrame = new List<FrameLine>(lines.Count);
+
+            lock (_gate)
+            {
+                foreach (var l in lines)
+                {
+                    var k = TextFilter.NormalizeKey(l.Text);
+                    var canonText = l.Text;
+                    if (hasPrev &&
+                        !_realtimeKeys.Contains(k) && !_oneShotKeys.Contains(k) &&
+                        !_pending.ContainsKey(k) && !_cache.Has(k))
+                    {
+                        foreach (var fl in _lastFrameLines)
+                        {
+                            if (fl.Monitor != l.MonitorIndex) continue;
+                            if (FuzzyText.RectIoU(fl.X, fl.Y, fl.W, fl.H,
+                                l.X, l.Y, l.Width, l.Height) < 0.5) continue;
+                            if (FuzzyText.Similarity(fl.Text, l.Text) >= 0.72)
+                            {
+                                canonText = fl.Text;   // 沿用上一帧的规范文本（其键已翻译/在册）
+                                k = fl.Key;
+                                break;
+                            }
+                        }
+                    }
+                    var lineOut = ReferenceEquals(canonText, l.Text) ? l : l with { Text = canonText };
+                    result.Add(lineOut);
+                    newFrame.Add(new FrameLine
+                    {
+                        Key = k, Text = canonText,
+                        X = lineOut.X, Y = lineOut.Y, W = lineOut.Width, H = lineOut.Height,
+                        Monitor = lineOut.MonitorIndex
+                    });
+                }
+            }
+            _lastFrameLines = newFrame;
+            return result;
         }
 
         // ---------------- 快捷键一次性模式 ----------------
@@ -215,9 +274,11 @@ namespace GlassTranslate.Core
                         {
                             if (idx < 0 || idx >= batch.Count) return;
                             var target = batch[idx];
-                            if (string.IsNullOrEmpty(text)) return;
-                            _sink.OnTranslationDelta(target.Key, text);
-                            _cache.Put(target.Key, text);
+                            // 后处理：标点规整/退化检测；可疑或无效译文按失败处理
+                            var cleaned = TranslationPostProcess.Clean(text);
+                            if (string.IsNullOrEmpty(cleaned)) return;
+                            _sink.OnTranslationDelta(target.Key, cleaned);
+                            _cache.Put(target.Key, cleaned);
                             completed.Add(target.Key);
                             UsageStats.AddLine();
                             _sink.OnTranslationDone(target.Key);

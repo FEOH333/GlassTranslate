@@ -32,7 +32,8 @@ namespace GlassTranslate
                 try { Console.WriteLine(s); } catch { }
             }
 
-            W($"==== GlassTranslate v2.0 self-test (offline) @ {DateTime.Now:yyyy-MM-dd HH:mm:ss} ====");
+            var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?";
+            W($"==== GlassTranslate v{ver} self-test (offline) @ {DateTime.Now:yyyy-MM-dd HH:mm:ss} ====");
             W($"OS: {Environment.OSVersion}  64bit={Environment.Is64BitProcess}");
 
             // 显示器
@@ -120,6 +121,26 @@ namespace GlassTranslate
                 }
                 mt.Dispose();
             }
+
+            // 防重复/防错翻 单元样本
+            W("post-process samples:");
+            foreach (var (raw, note) in new[]
+            {
+                ("你好,世界! !", "标点规整"),
+                ("单击下面的按钮上传文件。。", "句号折叠"),
+                ("公约公约公约公约公约公约公约", "退化循环→null"),
+                ("The quick brown fox", "无汉字→null"),
+            })
+            {
+                var cleaned = TranslationPostProcess.Clean(raw);
+                W($"  \"{Trunc(raw, 24)}\" → {(cleaned == null ? "(null)" : $"\"{cleaned}\"")}   # {note}");
+            }
+            W($"fuzzy: sim(\"Settings and preferences\",\"Settings and preferences. \")=" +
+              $"{FuzzyText.Similarity("Settings and preferences", "Settings and preferences. "):0.00}  " +
+              $"sim(\"The quick fox\",\"Insert table here\")=" +
+              $"{FuzzyText.Similarity("The quick fox", "Insert table here"):0.00}  " +
+              $"IoU(同位)={FuzzyText.RectIoU(100, 100, 400, 20, 100, 100, 400, 20):0.00}");
+            W($"filter accented: \"Les paramètres et préférences\" → {TextFilter.ShouldTranslate("Les paramètres et préférences")}");
 
             W("==== self-test done ====");
             var outp = Path.Combine(AppContext.BaseDirectory, "selftest.log");

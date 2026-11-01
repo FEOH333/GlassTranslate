@@ -18,22 +18,65 @@
         </ItemsControl.ItemContainerStyle>
         <ItemsControl.ItemTemplate>
             <DataTemplate>
-                <Border CornerRadius="9" Padding="10,6" MaxWidth="340"
-                        Background="#D9161B24" BorderBrush="#55FFFFFF" BorderThickness="1"
+                <Border CornerRadius="10" Padding="11,7" MaxWidth="344"
                         Opacity="0" RenderTransformOrigin="0.5,1">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#EB141B27" Offset="0"/>
+                            <GradientStop Color="#EB1E2938" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#73FFFFFF" Offset="0"/>
+                            <GradientStop Color="#45A5D8FF" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.BorderBrush>
+                    <Border.Effect>
+                        <DropShadowEffect Color="#FF000000" BlurRadius="12" ShadowDepth="2" Opacity="0.42"/>
+                    </Border.Effect>
                     <Border.RenderTransform>
-                        <TranslateTransform x:Name="Tt" Y="6"/>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="Pop" ScaleX="0.94" ScaleY="0.94"/>
+                            <TranslateTransform x:Name="Tt" Y="6"/>
+                        </TransformGroup>
                     </Border.RenderTransform>
                     <Border.Triggers>
                         <EventTrigger RoutedEvent="Loaded">
                             <BeginStoryboard>
                                 <Storyboard>
-                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.24"/>
-                                    <DoubleAnimation Storyboard.TargetName="Tt" Storyboard.TargetProperty="Y" From="6" To="0" Duration="0:0:0.28"/>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
+                                    <DoubleAnimation Storyboard.TargetName="Pop" Storyboard.TargetProperty="ScaleX" From="0.94" To="1" Duration="0:0:0.24">
+                                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                    <DoubleAnimation Storyboard.TargetName="Pop" Storyboard.TargetProperty="ScaleY" From="0.94" To="1" Duration="0:0:0.24">
+                                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                    <DoubleAnimation Storyboard.TargetName="Tt" Storyboard.TargetProperty="Y" From="6" To="0" Duration="0:0:0.26">
+                                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
                                 </Storyboard>
                             </BeginStoryboard>
                         </EventTrigger>
                     </Border.Triggers>
+
+                    <Grid>
+                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="13.5"
+                                   Foreground="#F8FFFFFF" LineHeight="20"
+                                   TextOptions.TextFormattingMode="Display"/>
+                        <!-- 玻璃上缘高光 -->
+                        <Border Margin="-8,-6,-8,0" Height="1.2" VerticalAlignment="Top"
+                                CornerRadius="0.6,0.6,0,0" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#38FFFFFF" Offset="0"/>
+                                    <GradientStop Color="#0FFFFFFF" Offset="0.5"/>
+                                    <GradientStop Color="#1FFFFFFF" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                    </Grid>
+
                     <Border.Style>
                         <Style TargetType="Border">
                             <Style.Triggers>
@@ -49,9 +92,6 @@
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
-                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="13.5"
-                               Foreground="#F5FFFFFF" LineHeight="20"
-                               TextOptions.TextFormattingMode="Display"/>
                 </Border>
             </DataTemplate>
         </ItemsControl.ItemTemplate>

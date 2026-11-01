@@ -238,7 +238,7 @@ namespace GlassTranslate.Core
             // 分格哈希：先与旧值比较得出变化格范围，再替换
             var cells = CellHashes(px, sw, sh);
             bool fullScan = mon.FullScanNext || mon.CellHashes == null;
-            int changedCells = 0, c0 = Cols, c1 = -1, r0 = Rows, r1 = -1;
+            int changedCells = 0, r0 = Rows, r1 = -1;
             if (mon.CellHashes != null)
             {
                 for (int row = 0; row < Rows; row++)
@@ -247,7 +247,6 @@ namespace GlassTranslate.Core
                         int idx = row * Cols + col;
                         if (cells[idx].AsSpan().SequenceEqual(mon.CellHashes[idx])) continue;
                         changedCells++;
-                        c0 = Math.Min(c0, col); c1 = Math.Max(c1, col);
                         r0 = Math.Min(r0, row); r1 = Math.Max(r1, row);
                     }
             }
@@ -255,16 +254,16 @@ namespace GlassTranslate.Core
             mon.CellHashes = cells;
             mon.FullScanNext = false;
 
-            // 识别区域：整帧 或 变化格联合区（外扩一格）
+            // 识别区域：整帧 或 变化格联合区（外扩一格）。
+            // 只做纵向带裁剪，横向始终整幅——文本行横向贯通，按列裁剪会把跨界
+            // 句子切成半句送翻（错翻根源）；滚动场景的主要收益本就在纵向。
             int rx = 0, ry = 0, rw = sw, rh = sh;
             if (!fullScan && changedCells > 0)
             {
-                c0 = Math.Max(0, c0 - 1); r0 = Math.Max(0, r0 - 1);
-                c1 = Math.Min(Cols - 1, c1 + 1); r1 = Math.Min(Rows - 1, r1 + 1);
-                rx = c0 * sw / Cols; ry = r0 * sh / Rows;
-                rw = Math.Min(sw - rx, (c1 + 1) * sw / Cols - rx);
+                r0 = Math.Max(0, r0 - 1); r1 = Math.Min(Rows - 1, r1 + 1);
+                ry = r0 * sh / Rows;
                 rh = Math.Min(sh - ry, (r1 + 1) * sh / Rows - ry);
-                if (rw < 40 || rh < 24) return (mon.LastLines, false);
+                if (rh < 24) return (mon.LastLines, false);
             }
             else if (!fullScan && changedCells == 0)
             {
